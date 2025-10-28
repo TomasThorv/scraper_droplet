@@ -1,0 +1,44 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<section class="card">
+  <h2>Review scraped images</h2>
+  {% if error %}
+    <p class="empty">{{ error }}</p>
+  {% elif not entries %}
+    <p class="empty">No matching SKUs were found in {{ IMAGES_PATH }}. Double-check that the scraper finished successfully.</p>
+  {% else %}
+  <form method="post">
+    {% for entry in entries %}
+    <div class="sku">
+      <h2>{{ entry.sku }}</h2>
+      {% if entry.images %}
+      <div class="image-grid">
+        {% for image in entry.images %}
+        <label class="image-card">
+          <span>
+            <input type="checkbox" name="selection[{{ entry.key }}]" value="{{ loop.index0 }}" checked>
+            Keep this image
+          </span>
+          <img src="{{ image }}" alt="Image {{ loop.index }} for {{ entry.sku }}" loading="lazy">
+          <span class="url">{{ image }}</span>
+        </label>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="empty">No images were scraped for this SKU.</p>
+      {% endif %}
+      <label class="drop">
+        <input type="checkbox" name="drop[{{ entry.key }}]" value="1">
+        Remove this SKU from the final images list
+      </label>
+    </div>
+    {% endfor %}
+    <div style="margin-top: 2rem; display: flex; gap: 1rem; align-items: center;">
+      <button type="submit">Save curated images</button>
+      <a href="{{ url_for('index') }}" style="font-weight: 600; text-decoration: none;">&larr; Back to SKU entry</a>
+    </div>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

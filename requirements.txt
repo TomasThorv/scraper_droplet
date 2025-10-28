@@ -18,3 +18,4 @@ python-dotenv>=1.0.0
 # Additional dependencies for stable operation
 click>=8.0.0
 vine>=5.0.0
+Flask>=2.3.0

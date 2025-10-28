@@ -1,0 +1,31 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<section class="card">
+  <h2>1. Enter the SKUs you want to scrape</h2>
+  <form method="post">
+    <label for="skus">One SKU per line</label>
+    <textarea id="skus" name="skus" placeholder="DD1234-001&#10;DH4071-101">{{ skus_text }}</textarea>
+    <p class="footer-hint">Duplicate SKUs are automatically removed while preserving their first occurrence.</p>
+    <label>
+      <input type="checkbox" name="run_pipeline">
+      Run the scraping pipeline immediately after saving
+    </label>
+    <div style="margin-top: 1.25rem; display: flex; gap: 1rem; align-items: center;">
+      <button type="submit">Save SKUs{% if not has_images %} &amp; continue{% endif %}</button>
+      {% if has_images %}
+      <a href="{{ url_for('review') }}" style="font-weight: 600; text-decoration: none;">Skip to image review &rarr;</a>
+      {% endif %}
+    </div>
+  </form>
+</section>
+
+<section class="card">
+  <h2>2. What happens next?</h2>
+  <ul>
+    <li>Saving SKUs writes them to <code>{{ SKUS_PATH }}</code>.</li>
+    <li>If you choose to run the pipeline, <code>run_all.py</code> is executed and should populate <code>{{ IMAGES_PATH }}</code>.</li>
+    <li>Once images are available, continue to the review screen to curate the results.</li>
+  </ul>
+</section>
+{% endblock %}
