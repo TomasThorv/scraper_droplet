@@ -69,7 +69,7 @@ def _collect_current_hero_images(page: Page, existing: List[str]) -> None:
         '[data-testid*="Hero"] img',
         '[data-testid*="hero"] img',
         '[data-testid="pdp-image"] img',
-        'figure img[alt][src]'
+        "figure img[alt][src]",
     ]
 
     seen: Set[str] = set(existing)
@@ -103,7 +103,7 @@ def extract_hero_images(page: Page) -> List[str]:
         '[data-testid*="thumbnail"]',
         'button[aria-label*="image" i] img',
         '[data-testid^="PDP-ProductImageThumbnail"]',
-        'li[role="presentation"] button img'
+        'li[role="presentation"] button img',
     ]
 
     thumbnails = None
@@ -137,7 +137,11 @@ def extract_hero_images(page: Page) -> List[str]:
                 try:
                     # If it's an <img>, click its parent button if present
                     handle = el.element_handle()
-                    tag = handle.evaluate("el => el.tagName.toLowerCase()") if handle else "img"
+                    tag = (
+                        handle.evaluate("el => el.tagName.toLowerCase()")
+                        if handle
+                        else "img"
+                    )
                     if tag == "img":
                         parent_button = el.locator("xpath=ancestor::button[1]")
                         if parent_button.count() > 0:
@@ -163,7 +167,7 @@ def extract_hero_images(page: Page) -> List[str]:
         chevron_selectors = [
             '[data-testid="chevronRight"]',
             'button[aria-label*="Next" i]',
-            'button[title*="Next" i]'
+            'button[title*="Next" i]',
         ]
         for cs in chevron_selectors:
             try:
@@ -211,12 +215,16 @@ class NikeScraper:
 
     def __enter__(self) -> "NikeScraper":
         self._playwright = sync_playwright().start()
-        self._browser = self._playwright.chromium.launch(headless=self.headless,
-            args=["--disable-blink-features=AutomationControlled",
-                  "--disable-dev-shm-usage",
-                  "--disable-gpu",
-                  "--no-sandbox",
-                  "--window-size=1920,1080"])
+        self._browser = self._playwright.chromium.launch(
+            headless=self.headless,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--no-sandbox",
+                "--window-size=1920,1080",
+            ],
+        )
         self._page = self._browser.new_page()
         return self
 
