@@ -75,16 +75,34 @@ def extract_hero_images(page: Page) -> List[str]:
     if had_thumbnails:
         for thumb in thumbnails.element_handles():
             try:
-                thumb.hover(force=True)
+                thumb.scroll_into_view_if_needed()
             except Exception:
-                continue
-            page.wait_for_timeout(120)
-            _collect_current_hero_images(page, hero_images)
-            page.wait_for_timeout(300)
+                pass
 
+            # Hover first – this works for the regular desktop experience.
+            try:
+                thumb.hover(force=True)
+                page.wait_for_timeout(200)
+            except Exception:
+                pass
+
+            _collect_current_hero_images(page, hero_images)
+
+            # In newer headless builds the hover event is sometimes ignored; fall back to
+            # clicking the thumbnail to force the gallery to update.
+            try:
+                thumb.click(force=True)
+                page.wait_for_timeout(250)
+            except Exception:
+                pass
+
+            _collect_current_hero_images(page, hero_images)
+
+        # Reset the gallery to the first thumbnail so subsequent interactions (or manual
+        # review in a visible browser) start from the hero image again.
         try:
             if thumbnails.count() > 0:
-                thumbnails.nth(0).hover(force=True)
+                thumbnails.nth(0).click(force=True)
         except Exception:
             pass
     else:
