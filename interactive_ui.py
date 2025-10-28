@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Flask UI for entering SKUs, running the scraper, and curating images."""
+"""Simple interactive helper to run the scraping pipeline and curate results."""
 
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -12,247 +11,188 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
 
-from flask import Flask, redirect, render_template, request, url_for
 
 FILES_DIR = Path("files")
 SKUS_PATH = FILES_DIR / "skus.txt"
 IMAGES_PATH = FILES_DIR / "images.json"
-
-app = Flask(__name__)
-
-
-class ImagesError(RuntimeError):
-    """Raised when images.json cannot be loaded."""
 
 
 def _normalise_sku(value: str) -> str:
     return value.strip().upper()
 
 
-def parse_skus(text: str) -> List[str]:
+def prompt_for_skus() -> List[str]:
+    print("Enter the SKUs you want to scrape. Press Enter on an empty line to finish.")
+    print("Duplicates will be removed while preserving order.\n")
+
     skus: List[str] = []
     seen: set[str] = set()
 
-    for line in text.splitlines():
-        cleaned = line.strip()
-        if not cleaned:
-            continue
-        key = _normalise_sku(cleaned)
+    while True:
+        try:
+            entered = input("SKU: ").strip()
+        except EOFError:
+            print()
+            break
+
+        if not entered:
+            break
+
+        key = _normalise_sku(entered)
         if key in seen:
+            print("  ↺ SKU already entered; skipping duplicate.")
             continue
         seen.add(key)
-        skus.append(cleaned)
+        skus.append(entered)
 
+    if not skus:
+        print("No SKUs entered – nothing to do.")
+        sys.exit(0)
+
+    FILES_DIR.mkdir(parents=True, exist_ok=True)
+    SKUS_PATH.write_text("\n".join(skus) + "\n", encoding="utf-8")
+    print(f"\n✅ Wrote {len(skus)} SKU(s) to {SKUS_PATH}.")
     return skus
 
 
-def save_skus(skus: List[str]) -> None:
-    FILES_DIR.mkdir(parents=True, exist_ok=True)
-    SKUS_PATH.write_text("\n".join(skus) + "\n", encoding="utf-8")
-
-
-def load_existing_skus() -> List[str]:
-    if not SKUS_PATH.exists():
-        return []
-    return [line.strip() for line in SKUS_PATH.read_text(encoding="utf-8").splitlines() if line.strip()]
-
-
-def run_pipeline() -> tuple[bool, str]:
+def run_pipeline() -> None:
+    print("\n▶️  Running full scraping pipeline (run_all.py)…")
     result = subprocess.run([sys.executable, "run_all.py"])
     if result.returncode != 0:
-        return False, f"Pipeline failed with exit code {result.returncode}."
-    return True, "Scraping pipeline completed successfully."
+        sys.exit(f"Pipeline failed with exit code {result.returncode}.")
 
 
 def load_images() -> List[dict]:
     if not IMAGES_PATH.exists():
-        raise ImagesError(f"Expected {IMAGES_PATH} to exist after the pipeline run.")
+        sys.exit(f"Expected {IMAGES_PATH} to exist after the pipeline run.")
 
     try:
         data = json.loads(IMAGES_PATH.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
-        raise ImagesError(f"Could not parse {IMAGES_PATH}: {exc}") from exc
+        sys.exit(f"Could not parse {IMAGES_PATH}: {exc}")
 
     if not isinstance(data, list):
-        raise ImagesError(f"Unexpected format in {IMAGES_PATH}: expected a list of objects.")
+        sys.exit(f"Unexpected format in {IMAGES_PATH}: expected a list of objects.")
 
     return data
 
 
-def build_review_entries(data: List[dict], skus: List[str]) -> List[dict]:
-    wanted = [_normalise_sku(s) for s in skus]
-    wanted_set = set(wanted)
-    seen: set[str] = set()
-    entries: List[dict] = []
+def prompt_for_images(entry: dict) -> List[int] | None:
+    sku = str(entry.get("sku", "")).strip() or "(unknown SKU)"
+    images = entry.get("images") or []
 
-    for entry in data:
-        key = _normalise_sku(str(entry.get("sku", "")))
-        if key in wanted_set and key not in seen:
-            entries.append(
-                {
-                    "sku": str(entry.get("sku", "")).strip() or key,
-                    "key": key,
-                    "images": list(entry.get("images") or []),
-                    "raw": entry,
-                }
-            )
-            seen.add(key)
+    print(f"\n📦 {sku}")
 
-    return entries
+    if not images:
+        print("  No images were scraped for this SKU.")
+        return None
+
+    for idx, url in enumerate(images, start=1):
+        print(f"  [{idx}] {url}")
+
+    print(
+        "  Choose which images to keep. Options:\n"
+        "    • Press Enter to keep all images\n"
+        "    • Type numbers separated by spaces (e.g. '1 3 4')\n"
+        "    • Type 'n' to drop this SKU entirely"
+    )
+
+    while True:
+        response = input("  Selection: ").strip().lower()
+        if response in {"", "a", "all"}:
+            return list(range(len(images)))
+        if response in {"n", "none"}:
+            return []
+
+        parts = response.replace(",", " ").split()
+        try:
+            indices = sorted({int(p) for p in parts})
+        except ValueError:
+            print("  ✖️  Invalid input – use numbers like '1 2 3', or Enter for all.")
+            continue
+
+        if not indices:
+            print("  ✖️  No numbers recognised – try again.")
+            continue
+
+        if any(i < 1 or i > len(images) for i in indices):
+            print("  ✖️  Selection outside valid range – try again.")
+            continue
+
+        # Convert to zero-based indexes for easier slicing later on.
+        return [i - 1 for i in indices]
 
 
-def backup_images() -> Path:
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    backup_name = f"{IMAGES_PATH.name}.bak.{timestamp}"
-    backup_path = IMAGES_PATH.with_name(backup_name)
-    shutil.copy2(IMAGES_PATH, backup_path)
-    return backup_path
-
-
-def apply_selections(original: List[dict], selections: Dict[str, dict | None]) -> List[dict]:
+def apply_selections(
+    original: List[dict], selections: Dict[str, dict | None]
+) -> List[dict]:
     result: List[dict] = []
     for entry in original:
         key = _normalise_sku(str(entry.get("sku", "")))
         if key in selections:
             chosen = selections[key]
             if chosen is None:
-                continue
+                continue  # User opted to drop this SKU entirely
             result.append(chosen)
         else:
             result.append(entry)
     return result
 
 
-@app.route("/", methods=["GET", "POST"])
-def index():
-    error: str | None = None
-    info: str | None = None
+def main() -> None:
+    skus = prompt_for_skus()
 
-    skus_text = SKUS_PATH.read_text(encoding="utf-8") if SKUS_PATH.exists() else ""
+    answer = input("\nRun the scraping pipeline now? [Y/n]: ").strip().lower()
+    if answer in {"", "y", "yes"}:
+        run_pipeline()
+    else:
+        print("Skipping pipeline run – using existing files/images.json.")
 
-    if request.method == "POST":
-        raw = request.form.get("skus", "")
-        run_now = request.form.get("run_pipeline") == "on"
+    data = load_images()
 
-        skus = parse_skus(raw)
-        if not skus:
-            error = "Add at least one SKU before continuing."
-        else:
-            save_skus(skus)
-            info = f"Saved {len(skus)} SKU(s) to {SKUS_PATH}."
+    keys_to_review = {_normalise_sku(s) for s in skus}
+    filtered_map: Dict[str, dict | None] = {}
 
-            if run_now:
-                ok, message = run_pipeline()
-                if not ok:
-                    error = message
-                else:
-                    info = message
+    for entry in data:
+        key = _normalise_sku(str(entry.get("sku", "")))
+        if key not in keys_to_review:
+            continue
 
-            if not error:
-                return redirect(url_for("review"))
+        selection = prompt_for_images(entry)
+        if selection is None:
+            filtered_map[key] = entry.copy()
+            continue
 
-    has_images = IMAGES_PATH.exists()
-    return render_template(
-        "index.html",
-        skus_text=skus_text,
-        error=error,
-        success=None,
-        info=info,
-        has_images=has_images,
-        SKUS_PATH=SKUS_PATH,
-        IMAGES_PATH=IMAGES_PATH,
-    )
+        images = entry.get("images") or []
+        if not selection:
+            print("  ↳ Dropping this SKU from the final list.")
+            filtered_map[key] = None
+            continue
 
+        chosen_images = [images[i] for i in selection if 0 <= i < len(images)]
+        new_entry = dict(entry)
+        new_entry["images"] = chosen_images
+        filtered_map[key] = new_entry
+        print(f"  ↳ Keeping {len(chosen_images)} image(s).")
 
-@app.route("/review", methods=["GET", "POST"])
-def review():
-    skus = load_existing_skus()
-    if not skus:
-        return redirect(url_for("index"))
+    if not filtered_map:
+        print("\nNo matching SKUs found in images.json – nothing to update.")
+        return
 
-    try:
-        data = load_images()
-    except ImagesError as exc:
-        return render_template(
-            "review.html",
-            error=str(exc),
-            entries=[],
-            skus=skus,
-            success=None,
-            info=None,
-            IMAGES_PATH=IMAGES_PATH,
-        )
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    backup_name = f"{IMAGES_PATH.name}.bak.{timestamp}"
+    backup_path = IMAGES_PATH.with_name(backup_name)
+    shutil.copy2(IMAGES_PATH, backup_path)
+    print(f"\n🗃️  Backed up existing images to {backup_path}.")
 
-    entries = build_review_entries(data, skus)
+    updated = apply_selections(data, filtered_map)
 
-    if request.method == "POST":
-        selections: Dict[str, dict | None] = {}
-
-        for entry in entries:
-            key = entry["key"]
-            drop_selected = request.form.get(f"drop[{key}]")
-            if drop_selected:
-                selections[key] = None
-                continue
-
-            if not entry["images"]:
-                continue
-
-            raw_values = request.form.getlist(f"selection[{key}]")
-            try:
-                indexes = sorted({int(value) for value in raw_values})
-            except ValueError:
-                indexes = []
-
-            if not indexes:
-                selections[key] = None
-                continue
-
-            chosen_images = [entry["images"][i] for i in indexes if 0 <= i < len(entry["images"]) ]
-            if not chosen_images:
-                selections[key] = None
-                continue
-
-            if chosen_images == entry["images"]:
-                continue
-
-            new_entry = dict(entry["raw"])
-            new_entry["images"] = chosen_images
-            selections[key] = new_entry
-
-        if selections:
-            updated = apply_selections(data, selections)
-            if updated != data:
-                backup_path = backup_images()
-                IMAGES_PATH.write_text(json.dumps(updated, indent=2), encoding="utf-8")
-                return redirect(url_for("review", saved="1", backup=backup_path.name))
-
-        return redirect(url_for("review", saved="0"))
-
-    saved = request.args.get("saved")
-    backup_name = request.args.get("backup")
-
-    success: str | None = None
-    info: str | None = None
-
-    if saved == "1":
-        success = f"Updated {IMAGES_PATH} with your selections."
-        if backup_name:
-            success += f" Backup stored as {backup_name}."
-    elif saved == "0":
-        info = "No changes detected; images.json was left untouched."
-
-    return render_template(
-        "review.html",
-        entries=entries,
-        skus=skus,
-        error=None,
-        success=success,
-        info=info,
-        IMAGES_PATH=IMAGES_PATH,
-    )
+    IMAGES_PATH.write_text(json.dumps(updated, indent=2), encoding="utf-8")
+    print(f"✅ Updated {IMAGES_PATH} with your selections.")
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", "5000"))
-    app.run(host="0.0.0.0", port=port)
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nInterrupted by user.")
