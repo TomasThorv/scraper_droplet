@@ -1,0 +1,26 @@
+[
+  {
+    "sku": "FQ1457-302",
+    "images": [
+      "https://assets.solesense.com/en/images/products/500/nike-mercurial-vapor-16-elite-fg-limelight-fq1457-302_1.jpg"
+    ]
+  },
+  {
+    "sku": "FQ1457-600",
+    "images": [
+      "https://assets.solesense.com/en/images/products/500/nike-mercurial-vapor-16-elite-firm-ground-low-top-magic-flamingo-fq1457-600_1.jpg"
+    ]
+  },
+  {
+    "sku": "IM0521-010",
+    "images": [
+      "https://static.nike.com/a/images/t_web_pdp_535_v2/f_auto/cca6a6fa-cb72-444e-a20b-f93b7ed20d37/FCB+NK+HERITAGE+GMSK+AOP+AW.png"
+    ]
+  },
+  {
+    "sku": "SKU",
+    "images": [
+      "Image_URL"
+    ]
+  }
+]

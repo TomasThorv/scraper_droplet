@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+
+# OS / Editors
+.DS_Store
+.idea/
+.vscode/
+
+# Env & secrets
+.env
+.env.*
+*.local
+
+# Browsers / scrapers
+chromium/
+chrome-data/
+.playwright/
+playwright/
+user-data-dir/
+*.log
+
+# Archives / binaries
+*.deb
+*.zip
+*.tar
+*.tar.gz
+
+# Project specifics
+files/*.bak*

@@ -1,0 +1,22 @@
+[
+    {
+        "sku": "107916-01",
+        "images": [
+            "https://cdn.sanity.io/images/qa41whrn/prod/e96b4acf23ea30fc98330bd81bf8bf60c095e382-2000x1125.jpg",
+            "https://cdn.sanity.io/images/qa41whrn/prod/20b147048076f1fe8fbb81d92d37edd6cfb51bad-960x500.jpg",
+            "https://cdn.sanity.io/images/qa41whrn/prod/4d085cb68d66ce32cdd2a523bf0755402f3a38fb-2000x1125.jpg",
+            "https://cdn.sanity.io/images/qa41whrn/prod/16a41fef4a322c9386209593859c567afa4e185a-2000x1125.jpg",
+            "https://cdn.sanity.io/images/qa41whrn/prod/2b12843b75a5868b0ba948d112aa87eee110a63b-960x500.jpg",
+            "https://cdn.sanity.io/images/qa41whrn/prod/a63df81b54ecf5435fc997dba9a18a80056ae5c7-2000x1125.jpg",
+            "https://cdn.sanity.io/images/qa41whrn/prod/3b7819625c92b0922a530d1fd5910afae8176caa-960x500.jpg",
+            "https://cdn.sanity.io/images/qa41whrn/prod/364462fbffcaf67da5182cb6650dad0a16fa2676-1536x1536.jpg",
+            "https://cdn.sanity.io/images/qa41whrn/prod/0319f5d9ae4360f585c8b2537c3e5aa964dd47e9-2000x1125.jpg"
+        ]
+    },
+    {
+        "sku": "SKU",
+        "images": [
+            "Image_URL"
+        ]
+    }
+]

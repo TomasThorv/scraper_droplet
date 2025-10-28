@@ -1,0 +1,10 @@
+SKU	Name	Image_URL
+JW7889	Foot-store : Store 100% Football | Shirts and boots	
+JW7889	This site can’t be reached	
+IM0521-010	FC Barcelona Rope Bag 2025/26	
+IB9491-405		
+JJ3532	Goalkeeper gloves without finger protection adidas Predator Pro	
+JJ3532	This site can’t be reached	
+FQ1457-600	Nike Zoom Mercurial Vapor 16 Elite FG 'Scary Good Pack' - FQ1457-600 | Solesense	https://assets.solesense.com/en/images/products/500/nike-mercurial-vapor-16-elite-firm-ground-low-top-magic-flamingo-fq1457-600_1.jpg
+FQ1457-302	Football boots Nike Mercurial Vapor 16 Elite FG	
+FQ1457-302	Nike Mercurial Vapor 16 Elite Firm-Ground Low-Top 'Limelight/Hyper Crimson/Volt' - FQ1457-302 | Solesense	https://assets.solesense.com/en/images/products/500/nike-mercurial-vapor-16-elite-fg-limelight-fq1457-302_1.jpg
