@@ -9,7 +9,7 @@ so we still benefit from the battle-tested DOM traversal logic.
 
 from __future__ import annotations
 
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Set
 
 from playwright.sync_api import (
     sync_playwright,
@@ -44,51 +44,158 @@ def handle_geo_modal(page: Page) -> None:
         pass
 
 
-def _collect_current_hero_images(page: Page, existing: List[str]) -> None:
-    hero = page.locator('[data-testid="HeroImgContainer"] img')
-    try:
-        hero.first.wait_for(state="visible", timeout=2_000)
-    except (PlaywrightTimeoutError, TimeoutError):
-        pass
+def _parse_src_or_srcset(el) -> Optional[str]:
+    """Return the best image URL from an <img> element, preferring largest srcset."""
+    src = el.get_attribute("src") or ""
+    srcset = el.get_attribute("srcset") or ""
 
-    for handle in hero.element_handles():
-        hero_src = handle.get_attribute("src")
-        if hero_src and hero_src not in existing:
-            existing.append(hero_src)
+    # If srcset present, pick the last (usually largest) candidate
+    if srcset:
+        try:
+            candidates = [c.strip() for c in srcset.split(",") if c.strip()]
+            if candidates:
+                last = candidates[-1].split()[0]
+                return last
+        except Exception:
+            pass
+    return src or None
+
+
+def _collect_current_hero_images(page: Page, existing: List[str]) -> None:
+    """Collect currently displayed hero images using robust selectors and srcset parsing."""
+    # Try a few hero image containers/selectors seen across Nike PDPs
+    hero_locators = [
+        '[data-testid="HeroImgContainer"] img',
+        '[data-testid*="Hero"] img',
+        '[data-testid*="hero"] img',
+        '[data-testid="pdp-image"] img',
+        'figure img[alt][src]'
+    ]
+
+    seen: Set[str] = set(existing)
+    for css in hero_locators:
+        hero = page.locator(css)
+        try:
+            if hero.count() > 0:
+                hero.first.wait_for(state="visible", timeout=2_000)
+        except (PlaywrightTimeoutError, TimeoutError):
+            pass
+
+        for handle in hero.element_handles():
+            best = _parse_src_or_srcset(handle)
+            if best and best not in seen:
+                existing.append(best)
+                seen.add(best)
 
 
 def extract_hero_images(page: Page) -> List[str]:
-    thumbnails = page.locator('[data-testid^="Thumbnail-"]:not([data-testid*="Thumbnail-Img-"])')
+    """Collect as many PDP images as possible.
 
-    had_thumbnails = False
-    try:
-        if thumbnails.count() > 0:
-            thumbnails.first.wait_for(state="visible", timeout=5_000)
-            had_thumbnails = True
-    except (PlaywrightTimeoutError, TimeoutError):
-        had_thumbnails = False
+    Strategy:
+    1) Try thumbnails via robust selectors; click (not hover) to force hero change.
+    2) After iterating visible thumbs, attempt to click a "next" chevron if present.
+    3) Always collect currently displayed hero after each interaction.
+    4) Fallback: scrape all gallery-like <img> URLs that look like Nike CDN images.
+    """
+    # A union of common thumbnail selectors observed on Nike PDPs over time
+    thumb_selectors = [
+        '[data-testid^="Thumbnail-"]',
+        '[data-testid*="thumbnail"]',
+        'button[aria-label*="image" i] img',
+        '[data-testid^="PDP-ProductImageThumbnail"]',
+        'li[role="presentation"] button img'
+    ]
+
+    thumbnails = None
+    for sel in thumb_selectors:
+        loc = page.locator(sel)
+        try:
+            if loc.count() > 0:
+                loc.first.wait_for(state="visible", timeout=3_000)
+                thumbnails = loc
+                break
+        except (PlaywrightTimeoutError, TimeoutError):
+            continue
 
     handle_geo_modal(page)
 
     hero_images: List[str] = []
 
-    if had_thumbnails:
-        for thumb in thumbnails.element_handles():
-            try:
-                thumb.hover(force=True)
-            except Exception:
-                continue
-            page.wait_for_timeout(120)
-            _collect_current_hero_images(page, hero_images)
-            page.wait_for_timeout(300)
-
+    if thumbnails and thumbnails.count() > 0:
+        # Scroll thumbnails into view to ensure they load
         try:
-            if thumbnails.count() > 0:
-                thumbnails.nth(0).hover(force=True)
+            thumbnails.first.scroll_into_view_if_needed()
         except Exception:
             pass
+
+        count = thumbnails.count()
+        for i in range(count):
+            try:
+                el = thumbnails.nth(i)
+                el.scroll_into_view_if_needed()
+                # Prefer click over hover for reliability
+                try:
+                    # If it's an <img>, click its parent button if present
+                    handle = el.element_handle()
+                    tag = handle.evaluate("el => el.tagName.toLowerCase()") if handle else "img"
+                    if tag == "img":
+                        parent_button = el.locator("xpath=ancestor::button[1]")
+                        if parent_button.count() > 0:
+                            parent_button.first.click(timeout=2_000)
+                        else:
+                            el.click(timeout=2_000)
+                    else:
+                        el.click(timeout=2_000)
+                except Exception:
+                    # Fallback hover if click not possible
+                    try:
+                        el.hover(force=True)
+                    except Exception:
+                        pass
+
+                page.wait_for_timeout(250)
+                _collect_current_hero_images(page, hero_images)
+                page.wait_for_timeout(150)
+            except Exception:
+                continue
+
+        # Try clicking a next/chevron button a few times to reveal hidden thumbs
+        chevron_selectors = [
+            '[data-testid="chevronRight"]',
+            'button[aria-label*="Next" i]',
+            'button[title*="Next" i]'
+        ]
+        for cs in chevron_selectors:
+            try:
+                next_btn = page.locator(cs)
+                if next_btn.count() > 0:
+                    for _ in range(6):  # arbitrary cap
+                        try:
+                            next_btn.first.click(timeout=1_000)
+                            page.wait_for_timeout(200)
+                            _collect_current_hero_images(page, hero_images)
+                        except Exception:
+                            break
+                    break
+            except Exception:
+                pass
     else:
+        # No thumbnails found – at least collect whatever hero is present
         _collect_current_hero_images(page, hero_images)
+
+    # Fallback: collect gallery-like images from the page (Nike CDN)
+    try:
+        all_imgs = page.query_selector_all("img[src], img[srcset]")
+        for img in all_imgs:
+            best = _parse_src_or_srcset(img)
+            if not best:
+                continue
+            # Heuristic filter for Nike product CDN assets
+            if "static.nike.com" in best and "/images/" in best:
+                if best not in hero_images:
+                    hero_images.append(best)
+    except Exception:
+        pass
 
     return hero_images
 
