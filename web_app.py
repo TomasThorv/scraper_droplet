@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Iterable, List, Optional, Tuple
 
 import logging
+import textwrap
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
@@ -347,66 +348,522 @@ async def index(request: Request) -> HTMLResponse:
         request.client,
         request.query_params,
     )
-    html = (
-        "<!DOCTYPE html>\n"
-        '<html lang="en">\n'
-        "<head>\n"
-        '  <meta charset="utf-8">\n'
-        "  <title>Scraper Runner</title>\n"
-        "  <style>\n"
-        "    body { font-family: monospace; background:#111; color:#e0e0e0; margin:0; padding:1.5rem; }\n"
-        "    h1 { margin-top:0; }\n"
-        "    textarea { width:100%; min-height:8rem; background:#000; color:#0f0; border:1px solid #333; padding:0.5rem; }\n"
-        "    button { background:#0f0; color:#000; border:none; padding:0.5rem 1rem; font-weight:bold; cursor:pointer; margin-right:0.5rem; }\n"
-        "    button:disabled { background:#555; color:#999; cursor:not-allowed; }\n"
-        "    pre { background:#000; color:#0f0; padding:1rem; min-height:20rem; overflow:auto; border:1px solid #333; }\n"
-        "    .status { margin:0.5rem 0 1rem; }\n"
-        "    .results { margin-top:1rem; background:#000; color:#0ff; padding:1rem; border:1px solid #044; }\n"
-        "    .gallery { margin-top:1rem; background:#000; color:#0ff; padding:1rem; border:1px solid #044; }\n"
-        "    .sku-section { margin-bottom:2rem; border:1px solid #044; padding:1rem; }\n"
-        "    .sku-title { color:#0f0; font-size:1.2rem; margin-bottom:0.5rem; }\n"
-        "    .image-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:1rem; }\n"
-        "    .image-card { position:relative; border:1px solid #333; padding:0.5rem; background:#111; }\n"
-        "    .image-card img { width:100%; height:auto; display:block; }\n"
-        "    .delete-btn { position:absolute; top:0.5rem; right:0.5rem; background:#f00; color:#fff; border:none; padding:0.25rem 0.5rem; cursor:pointer; font-weight:bold; }\n"
-        "    .delete-btn:hover { background:#c00; }\n"
-        "    .image-url { font-size:0.7rem; color:#888; word-break:break-all; margin-top:0.25rem; }\n"
-        "    .upload-terminal { margin-top:1rem; background:#000; color:#0f0; padding:1rem; border:1px solid #0a0; }\n"
-        "  </style>\n"
-        "</head>\n"
-        "<body>\n"
-        "  <h1>Scraper Runner</h1>\n"
-        '  <div class="status" id="status">Status: idle</div>\n'
-        '  <form id="sku-form">\n'
-        '    <label for="skus">Enter SKU codes (one per line or comma separated):</label><br>\n'
-        '    <textarea id="skus" name="skus" placeholder="12345&#10;98765"></textarea>\n'
-        '    <div style="margin-top:0.5rem;">\n'
-        '      <button type="submit" id="run-btn">Run pipeline</button>\n'
-        '      <button type="button" id="stop-btn" style="background:#dc3545; color:white;" disabled>Stop Pipeline</button>\n'
-        '      <button type="button" id="clear-btn">Clear log</button>\n'
-        "    </div>\n"
-        "  </form>\n"
-        "  <h2>Terminal output</h2>\n"
-        '  <pre id="terminal"></pre>\n'
-        '  <div class="results" id="results" hidden>\n'
-        "    <strong>Results JSON:</strong>\n"
-        '    <button type="button" id="view-images-btn" style="margin-left:1rem;">View Images</button>\n'
-        '    <pre id="results-json" style="background:#000; color:#0ff; margin-top:0.5rem; max-height:15rem; overflow:auto;"></pre>\n'
-        "  </div>\n"
-        '  <div class="gallery" id="gallery" hidden>\n'
-        "    <h2>Image Gallery</h2>\n"
-        '    <div style="background:#fff3cd; border:1px solid #ffc107; padding:0.75rem; margin-bottom:1rem; border-radius:4px; color:#000;">\n'
-        "      <strong>⚠️ Reminder:</strong> Only the <strong>first 4 images</strong> for each SKU will be uploaded to Cloudinary.\n"
-        "    </div>\n"
-        '    <button type="button" id="close-gallery-btn">Close Gallery</button>\n'
-        '    <button type="button" id="upload-btn" style="margin-left:1rem; background:#28a745; color:white;">Done & Upload to Cloudinary</button>\n'
-        '    <div id="gallery-container" style="margin-top:1rem;"></div>\n'
-        "  </div>\n"
-        '  <div class="upload-terminal" id="upload-terminal" hidden>\n'
-        "    <h2>Upload Progress</h2>\n"
-        '    <button type="button" id="close-upload-btn">Close</button>\n'
-        '    <pre id="upload-output" style="background:#000; color:#0f0; padding:1rem; max-height:30rem; overflow:auto; margin-top:0.5rem;"></pre>\n'
-        "  </div>\n"
+    html = textwrap.dedent(
+        """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="utf-8">
+          <title>Scraper Runner</title>
+          <style>
+            /* site-theme.css
+               Dark, high-contrast "MNP" theme used by the app.
+               - Put this in your global stylesheet and adjust variables in :root as needed.
+            */
+
+            /* --- Theme variables (edit these to recolor the theme) --- */
+            :root{
+              --bg: #0b0b0d;                  /* page background */
+              --panel: #0f1113;               /* panels, tiles */
+              --panel-2: #0e1112;             /* alternate panel */
+              --muted: #7a7f85;               /* secondary text */
+              --text: #e6eef8;                /* main text */
+              --accent: #3da3ff;              /* primary blue */
+              --accent-2: #2b6fb6;            /* darker accent */
+              --border: rgba(125,150,200,0.12);
+              --glass: rgba(255,255,255,0.02);
+              --glass-2: rgba(255,255,255,0.03);
+              --glass-line: linear-gradient(90deg, transparent, rgba(58,140,255,0.12), transparent);
+              --shadow-weak: 0 6px 18px rgba(6,12,20,0.4);
+              --shadow-strong: 0 10px 30px rgba(13,43,90,0.45);
+              --danger: #ff6b6b;
+              --success: #2ad07a;
+              --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", "Courier New", monospace;
+              --ui-sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+              --radius: 0px;
+              --grid-accent: rgba(30,40,50,0.06);
+            }
+
+            /* --- Base page styles --- */
+            html, body, #root {
+              height: 100%;
+            }
+            body {
+              background: var(--bg);
+              color: var(--text);
+              font-family: var(--ui-sans);
+              margin: 0;
+              -webkit-font-smoothing:antialiased;
+              -moz-osx-font-smoothing:grayscale;
+              line-height: 1.35;
+              font-size: 14px;
+            }
+
+            /* Subtle textured background (military-grid) */
+            .military-grid {
+              background-image:
+                repeating-linear-gradient(0deg, rgba(255,255,255,0.01) 0 1px, transparent 1px 40px),
+                linear-gradient(180deg, rgba(255,255,255,0.01), transparent 180px),
+                var(--bg);
+              background-blend-mode: overlay;
+              min-height: 100vh;
+            }
+
+            /* Decorative thin highlight lines used in header/footer */
+            .glow-line {
+              height: 1px;
+              background: var(--glass-line);
+              display:block;
+            }
+
+            /* --- Typography helpers (project-specific) --- */
+            .wayne-title {
+              font-family: var(--ui-sans);
+              font-weight: 700;
+              letter-spacing: 0.01em;
+              color: var(--text);
+              margin: 0;
+            }
+
+            .wayne-subtitle {
+              font-family: var(--ui-sans);
+              font-weight: 600;
+              color: var(--text);
+              text-transform: none;
+              margin: 6px 0 0;
+            }
+
+            .wayne-mono {
+              font-family: var(--mono);
+              color: var(--muted);
+              letter-spacing: 0.06em;
+            }
+
+            /* Small uppercase micro text used across the UI */
+            .mini-uppercase {
+              font-size: 11px;
+              letter-spacing: .14em;
+              text-transform: uppercase;
+              color: var(--muted);
+            }
+
+            /* --- Pulse indicator (blue dot) --- */
+            @keyframes pulse-blue {
+              0% { box-shadow: 0 0 0 0 rgba(61,163,255,0.45); }
+              50% { box-shadow: 0 0 0 6px rgba(61,163,255,0.06); }
+              100% { box-shadow: 0 0 0 0 rgba(61,163,255,0.00); }
+            }
+
+            /* --- Layout containers --- */
+            .app-container {
+              max-width: 960px;
+              margin: 0 auto;
+              padding: 48px 32px 72px;
+              display: flex;
+              flex-direction: column;
+              gap: 28px;
+            }
+
+            .page-header {
+              display: flex;
+              justify-content: space-between;
+              align-items: flex-end;
+              gap: 16px;
+              flex-wrap: wrap;
+            }
+
+            .status-chip {
+              display: inline-flex;
+              align-items: center;
+              gap: 10px;
+              padding: 8px 12px;
+              background: rgba(61,163,255,0.08);
+              color: var(--accent);
+              border-radius: 4px;
+              font-weight: 600;
+              font-size: 12px;
+              letter-spacing: 0.02em;
+              border: 1px solid rgba(61,163,255,0.12);
+              text-transform: uppercase;
+            }
+
+            .status-chip::before {
+              content: "";
+              width: 8px;
+              height: 8px;
+              border-radius: 2px;
+              background: var(--accent);
+              animation: pulse-blue 1.8s infinite;
+              box-shadow: 0 0 0 0 rgba(61,163,255,0.45);
+            }
+
+            /* --- Scraper button (spider) --- */
+            .scraper-button {
+              display:inline-flex;
+              align-items:center;
+              gap:8px;
+              padding:6px 10px;
+              background: linear-gradient(90deg,var(--accent) 0%, var(--accent-2) 100%);
+              color: white;
+              border-radius:6px;
+              text-decoration:none;
+              font-weight:600;
+              font-size:12px;
+              box-shadow: var(--shadow-weak);
+            }
+            .scraper-button:hover {
+              opacity: .95;
+              transform: translateY(-1px);
+            }
+
+            /* --- Command center tiles / primary operation tiles --- */
+            .command-interface {
+              background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00)), var(--panel);
+              border: 1px solid rgba(61,163,255,0.06);
+              padding: 28px;
+              border-radius: var(--radius);
+              box-shadow: 0 4px 24px rgba(0,0,0,0.6);
+            }
+
+            .panel {
+              padding: 24px;
+              background: var(--panel-2);
+              border: 1px solid rgba(255,255,255,0.02);
+              border-radius: var(--radius);
+              box-shadow: 0 4px 24px rgba(0,0,0,0.35);
+            }
+
+            .form-stack {
+              display: flex;
+              flex-direction: column;
+              gap: 16px;
+            }
+
+            textarea {
+              width: 100%;
+              min-height: 10rem;
+              background: var(--panel-2);
+              color: var(--text);
+              border: 1px solid rgba(61,163,255,0.12);
+              padding: 14px;
+              font-family: var(--mono);
+              font-size: 13px;
+              border-radius: var(--radius);
+              box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
+            }
+
+            textarea:focus {
+              outline: none;
+              border-color: rgba(61,163,255,0.35);
+              box-shadow: 0 0 0 1px rgba(61,163,255,0.35);
+              background: rgba(61,163,255,0.04);
+            }
+
+            .button-row {
+              display: flex;
+              flex-wrap: wrap;
+              gap: 12px;
+            }
+
+            /* --- Buttons (primary) --- */
+            .wayne-button-primary {
+              display:inline-flex;
+              align-items:center;
+              justify-content:center;
+              gap: 10px;
+              padding: 12px 20px;
+              border-radius: 6px;
+              color: white;
+              background: linear-gradient(90deg,var(--accent) 0%, var(--accent-2) 100%);
+              border: 1px solid rgba(61,163,255,0.08);
+              font-weight:700;
+              font-size:14px;
+              text-decoration:none;
+              box-shadow: 0 8px 30px rgba(20,60,120,0.12);
+              cursor: pointer;
+              transition: transform .12s ease, box-shadow .12s ease, opacity .12s ease;
+            }
+
+            .wayne-button-primary:hover:not([disabled]) {
+              transform: translateY(-1px);
+              box-shadow: 0 12px 36px rgba(61,163,255,0.18);
+            }
+
+            .wayne-button-primary[disabled] {
+              opacity: .5;
+              cursor: not-allowed;
+              transform:none;
+            }
+
+            .button-danger {
+              background: linear-gradient(90deg, rgba(255,107,107,0.85), rgba(220,53,69,0.85));
+              border-color: rgba(255,107,107,0.32);
+              box-shadow: 0 8px 30px rgba(220,53,69,0.18);
+            }
+
+            .button-danger:hover:not([disabled]) {
+              box-shadow: 0 12px 42px rgba(220,53,69,0.28);
+            }
+
+            .wayne-button-ghost {
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              gap: 8px;
+              padding: 12px 18px;
+              border-radius: 6px;
+              background: rgba(255,255,255,0.02);
+              color: var(--text);
+              border: 1px solid rgba(255,255,255,0.06);
+              font-weight: 600;
+              font-size: 13px;
+              cursor: pointer;
+              text-decoration: none;
+              transition: background .12s ease, border-color .12s ease, color .12s ease;
+            }
+
+            .wayne-button-ghost:hover {
+              background: rgba(61,163,255,0.08);
+              border-color: rgba(61,163,255,0.12);
+              color: var(--accent);
+            }
+
+            .hint {
+              color: var(--muted);
+              font-size:12px;
+            }
+
+            .section-title {
+              margin: 0 0 12px;
+              font-size: 20px;
+              font-weight: 700;
+              letter-spacing: 0.02em;
+            }
+
+            .section-header {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              gap: 16px;
+              flex-wrap: wrap;
+              margin-bottom: 16px;
+            }
+
+            .log-terminal,
+            .results-pre {
+              background: rgba(8,10,12,0.9);
+              color: var(--success);
+              padding: 18px;
+              border: 1px solid rgba(61,163,255,0.08);
+              min-height: 20rem;
+              border-radius: var(--radius);
+              overflow: auto;
+              font-family: var(--mono);
+              font-size: 13px;
+              box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
+            }
+
+            .results-pre {
+              color: var(--accent);
+              min-height: 12rem;
+              max-height: 15rem;
+            }
+
+            .gallery-panel .results-pre {
+              min-height: unset;
+              max-height: unset;
+            }
+
+            .warning-banner {
+              background: rgba(255,210,120,0.12);
+              border: 1px solid rgba(255,210,120,0.26);
+              padding: 14px 16px;
+              border-radius: 4px;
+              color: #f8d57c;
+              font-size: 13px;
+              margin-bottom: 18px;
+            }
+
+            .gallery-grid {
+              display:grid;
+              grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
+              gap:18px;
+            }
+
+            .image-grid {
+              display:grid;
+              grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
+              gap:18px;
+            }
+
+            .sku-section {
+              margin-bottom: 28px;
+              padding: 18px;
+              border: 1px solid rgba(61,163,255,0.08);
+              background: rgba(12,16,20,0.65);
+              border-radius: var(--radius);
+              box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
+            }
+
+            .sku-title {
+              color: var(--accent);
+              font-weight: 700;
+              font-size: 14px;
+              margin: 0 0 12px;
+              text-transform: uppercase;
+              letter-spacing: 0.08em;
+            }
+
+            .image-card {
+              position:relative;
+              border:1px solid rgba(61,163,255,0.06);
+              padding:12px;
+              background: linear-gradient(180deg, rgba(255,255,255,0.012), rgba(0,0,0,0.02));
+              border-radius: var(--radius);
+              box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+            }
+
+            .image-card img {
+              width:100%;
+              height:auto;
+              display:block;
+              border-radius: 2px;
+            }
+
+            .delete-btn {
+              position:absolute;
+              top:12px;
+              right:12px;
+              background: linear-gradient(90deg, rgba(255,107,107,0.9), rgba(220,53,69,0.9));
+              color:#fff;
+              border:none;
+              padding:6px 10px;
+              cursor:pointer;
+              font-weight:600;
+              font-size:11px;
+              border-radius:4px;
+              box-shadow: 0 10px 28px rgba(220,53,69,0.26);
+              transition: transform .12s ease, box-shadow .12s ease;
+            }
+
+            .delete-btn:hover {
+              transform: translateY(-1px);
+              box-shadow: 0 12px 32px rgba(220,53,69,0.35);
+            }
+
+            .image-url {
+              font-size:11px;
+              color: var(--muted);
+              word-break:break-all;
+              margin-top:8px;
+              font-family: var(--mono);
+            }
+
+            .upload-terminal {
+              display: flex;
+              flex-direction: column;
+              gap: 18px;
+            }
+
+            .upload-terminal .results-pre {
+              max-height: 30rem;
+            }
+
+            .site-footer {
+              border-top: 1px solid var(--border);
+              background: linear-gradient(180deg, rgba(255,255,255,0.00), rgba(255,255,255,0.01));
+              padding: 20px 28px;
+              color: var(--muted);
+            }
+
+            @media (max-width: 900px) {
+              .app-container {
+                padding: 32px 20px 64px;
+              }
+
+              .log-terminal,
+              .results-pre {
+                min-height: 14rem;
+              }
+
+              .command-interface,
+              .panel {
+                padding: 22px;
+              }
+
+              .wayne-title { font-size: 1.7rem; }
+            }
+
+            @media (max-width: 600px) {
+              .button-row {
+                flex-direction: column;
+                align-items: stretch;
+              }
+
+              .wayne-button-primary,
+              .wayne-button-ghost {
+                width: 100%;
+              }
+            }
+          </style>
+        </head>
+        <body class="military-grid">
+          <div class="glow-line"></div>
+          <main class="app-container">
+            <header class="page-header">
+              <div>
+                <h1 class="wayne-title">Scraper Runner</h1>
+                <p class="wayne-subtitle">Control the scraping pipeline and review results.</p>
+              </div>
+              <div class="status-chip" id="status">Status: idle</div>
+            </header>
+            <section class="command-interface">
+              <form id="sku-form" class="form-stack">
+                <label for="skus" class="mini-uppercase">Enter SKU codes (one per line or comma separated)</label>
+                <textarea id="skus" name="skus" placeholder="12345&#10;98765"></textarea>
+                <div class="button-row">
+                  <button type="submit" id="run-btn" class="wayne-button-primary">Run pipeline</button>
+                  <button type="button" id="stop-btn" class="wayne-button-primary button-danger" disabled>Stop Pipeline</button>
+                  <button type="button" id="clear-btn" class="wayne-button-ghost">Clear log</button>
+                </div>
+              </form>
+            </section>
+            <section class="panel">
+              <h2 class="section-title">Terminal output</h2>
+              <pre id="terminal" class="log-terminal"></pre>
+            </section>
+            <section class="command-interface results-panel" id="results" hidden>
+              <div class="section-header">
+                <h2 class="section-title">Results JSON</h2>
+                <button type="button" id="view-images-btn" class="wayne-button-ghost">View Images</button>
+              </div>
+              <pre id="results-json" class="results-pre"></pre>
+            </section>
+            <section class="command-interface gallery-panel" id="gallery" hidden>
+              <div class="section-header">
+                <h2 class="section-title">Image Gallery</h2>
+                <div class="button-row">
+                  <button type="button" id="close-gallery-btn" class="wayne-button-ghost">Close Gallery</button>
+                  <button type="button" id="upload-btn" class="wayne-button-primary">Done &amp; Upload to Cloudinary</button>
+                </div>
+              </div>
+              <div class="warning-banner">
+                <strong>⚠️ Reminder:</strong> Only the <strong>first 4 images</strong> for each SKU will be uploaded to Cloudinary.
+              </div>
+              <div id="gallery-container" class="gallery-grid"></div>
+            </section>
+            <section class="command-interface upload-terminal" id="upload-terminal" hidden>
+              <div class="section-header">
+                <h2 class="section-title">Upload Progress</h2>
+                <button type="button" id="close-upload-btn" class="wayne-button-ghost">Close</button>
+              </div>
+              <pre id="upload-output" class="results-pre"></pre>
+            </section>
+          </main>
+          <div class="glow-line"></div>
+        """
+    )
+    html += (
         "  <script>\n"
         "    const statusEl = document.getElementById('status');\n"
         "    const terminalEl = document.getElementById('terminal');\n"
