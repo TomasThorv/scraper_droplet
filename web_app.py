@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 import os
@@ -12,6 +13,7 @@ from typing import Iterable, List, Optional, Tuple
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
+import uvicorn
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
