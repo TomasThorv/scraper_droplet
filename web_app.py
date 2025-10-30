@@ -409,103 +409,6 @@ async def index(request: Request) -> HTMLResponse:
               min-height: 100vh;
             }
 
-            /* Interactive hero canvas background */
-            .large-header {
-              position: relative;
-              width: 100%;
-              height: clamp(320px, 60vh, 560px);
-              background: radial-gradient(120% 120% at 50% 0%, rgba(61,163,255,0.16), transparent), var(--panel);
-              overflow: hidden;
-              background-size: cover;
-              background-position: center center;
-              z-index: 1;
-              border-bottom: 1px solid rgba(61,163,255,0.12);
-            }
-
-            .large-header::after {
-              content: "";
-              position: absolute;
-              inset: 0;
-              background: linear-gradient(180deg, rgba(9,16,28,0.4) 0%, rgba(9,16,28,0.85) 100%);
-              pointer-events: none;
-              z-index: 1;
-            }
-
-            .large-header canvas {
-              position: absolute;
-              top: 0;
-              left: 0;
-              width: 100%;
-              height: 100%;
-              display: block;
-              opacity: 0.8;
-            }
-
-            .hero-content {
-              position: relative;
-              z-index: 2;
-              height: 100%;
-              width: 100%;
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-              justify-content: center;
-              gap: 14px;
-              text-align: center;
-              padding: 64px 20px;
-            }
-
-            .main-title {
-              font-family: var(--ui-sans);
-              font-size: clamp(2.6rem, 5vw, 4.4rem);
-              letter-spacing: 0.22em;
-              text-transform: uppercase;
-              color: var(--text);
-              margin: 0;
-              text-shadow: 0 12px 30px rgba(0,0,0,0.55);
-            }
-
-            .main-title .thin {
-              font-weight: 300;
-              color: rgba(230,238,248,0.65);
-            }
-
-            .hero-tagline {
-              max-width: 540px;
-              color: var(--muted);
-              margin: 0 auto;
-              font-size: 15px;
-              line-height: 1.6;
-              letter-spacing: 0.02em;
-              text-shadow: 0 6px 18px rgba(0,0,0,0.6);
-            }
-
-            .hero-cta {
-              display: flex;
-              flex-wrap: wrap;
-              justify-content: center;
-              align-items: center;
-              gap: 16px;
-              margin-top: 8px;
-            }
-
-            .hero-button {
-              text-decoration: none;
-              box-shadow: var(--shadow-strong);
-            }
-
-            .hero-kicker {
-              display: inline-flex;
-              align-items: center;
-              gap: 6px;
-              padding: 8px 16px;
-              border-radius: 999px;
-              border: 1px solid rgba(61,163,255,0.24);
-              background: rgba(61,163,255,0.1);
-              color: var(--accent);
-              letter-spacing: 0.28em;
-            }
-
             /* Decorative thin highlight lines used in header/footer */
             .glow-line {
               height: 1px;
@@ -878,14 +781,6 @@ async def index(request: Request) -> HTMLResponse:
                 padding: 32px 20px 64px;
               }
 
-              .large-header {
-                height: clamp(280px, 55vh, 480px);
-              }
-
-              .main-title {
-                letter-spacing: 0.14em;
-              }
-
               .log-terminal,
               .results-pre {
                 min-height: 14rem;
@@ -900,19 +795,6 @@ async def index(request: Request) -> HTMLResponse:
             }
 
             @media (max-width: 600px) {
-              .hero-content {
-                padding: 48px 16px;
-              }
-
-              .main-title {
-                font-size: 2.2rem;
-              }
-
-              .hero-kicker {
-                letter-spacing: 0.18em;
-                padding: 6px 14px;
-              }
-
               .button-row {
                 flex-direction: column;
                 align-items: stretch;
@@ -926,19 +808,8 @@ async def index(request: Request) -> HTMLResponse:
           </style>
         </head>
         <body class="military-grid">
-          <div id="large-header" class="large-header">
-            <canvas id="demo-canvas"></canvas>
-            <div class="hero-content">
-              <h1 class="main-title">Connect <span class="thin">Three</span></h1>
-              <p class="hero-tagline">Synchronise scraping, review curated media, and launch uploads from a single command centre.</p>
-              <div class="hero-cta">
-                <a href="#control-panel" class="wayne-button-primary hero-button">Open Control Panel</a>
-                <span class="mini-uppercase hero-kicker">Live Automation</span>
-              </div>
-            </div>
-          </div>
           <div class="glow-line"></div>
-          <main class="app-container" id="control-panel">
+          <main class="app-container">
             <header class="page-header">
               <div>
                 <h1 class="wayne-title">Scraper Runner</h1>
@@ -993,7 +864,6 @@ async def index(request: Request) -> HTMLResponse:
         """
     )
     html += (
-        "  <script src=\"https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js\"></script>\n"
         "  <script>\n"
         "    (function() {\n"
         "      const largeHeader = document.getElementById('large-header');\n"
