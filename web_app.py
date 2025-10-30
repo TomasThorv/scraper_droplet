@@ -843,7 +843,7 @@ async def index(request: Request) -> HTMLResponse:
           <div class="glow-line"></div>
           <div id="large-header" class="large-header">
             <canvas id="demo-canvas"></canvas>
-            <h1 class="main-title" aria-hidden="true" style="position: absolute; left:50%; transform: translateX(-50%); top:18px; color: rgba(230,238,248,0.06); pointer-events: none;">Connect <span class="thin">Three</span></h1>
+            <h1 class="main-title" aria-hidden="true" style="position: absolute; left:50%; transform: translateX(-50%); top:18px; color: rgba(230,238,248,0.06); pointer-events: none;"><span class="thin"></span></h1>
           </div>
           <main class="app-container">
             <header class="page-header">
