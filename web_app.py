@@ -352,7 +352,7 @@ async def index(request: Request) -> HTMLResponse:
         "    const resultsBox = document.getElementById('results');\n"
         "    const resultsJsonEl = document.getElementById('results-json');\n"
         "    function appendLine(target, text) {\n"
-        "      target.textContent += (target.textContent ? '\n' : '') + text;\n"
+        "      target.textContent += (target.textContent ? '\\n' : '') + text;\n"
         "      target.scrollTop = target.scrollHeight;\n"
         "    }\n"
         "    async function refreshStatus() {\n"
