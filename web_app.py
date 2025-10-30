@@ -333,6 +333,8 @@ async def index(request: Request) -> HTMLResponse:
         "    .delete-btn { position:absolute; top:0.5rem; right:0.5rem; background:#f00; color:#fff; border:none; padding:0.25rem 0.5rem; cursor:pointer; font-weight:bold; }\n"
         "    .delete-btn:hover { background:#c00; }\n"
         "    .image-url { font-size:0.7rem; color:#888; word-break:break-all; margin-top:0.25rem; }\n"
+        "    .upload-terminal { margin-top:1rem; background:#000; color:#0f0; padding:1rem; border:1px solid #0a0; }\n"
+
         "  </style>\n"
         "</head>\n"
         "<body>\n"
@@ -355,8 +357,17 @@ async def index(request: Request) -> HTMLResponse:
         "  </div>\n"
         '  <div class="gallery" id="gallery" hidden>\n'
         "    <h2>Image Gallery</h2>\n"
+        '    <div style="background:#fff3cd; border:1px solid #ffc107; padding:0.75rem; margin-bottom:1rem; border-radius:4px;">\n'
+        '      <strong>⚠️ Reminder:</strong> Only the <strong>first 4 images</strong> for each SKU will be uploaded to Cloudinary.\n'
+        "    </div>\n"
         '    <button type="button" id="close-gallery-btn">Close Gallery</button>\n'
+        '    <button type="button" id="upload-btn" style="margin-left:1rem; background:#28a745; color:white;">Done & Upload to Cloudinary</button>\n'
         '    <div id="gallery-container" style="margin-top:1rem;"></div>\n'
+        "  </div>\n"
+        '  <div class="upload-terminal" id="upload-terminal" hidden>\n'
+        "    <h2>Upload Progress</h2>\n"
+        '    <button type="button" id="close-upload-btn">Close</button>\n'
+        '    <pre id="upload-output" style="background:#000; color:#0f0; padding:1rem; max-height:30rem; overflow:auto; margin-top:0.5rem;"></pre>\n'
         "  </div>\n"
         "  <script>\n"
         "    const statusEl = document.getElementById('status');\n"
@@ -440,6 +451,10 @@ async def index(request: Request) -> HTMLResponse:
         "    const closeGalleryBtn = document.getElementById('close-gallery-btn');\n"
         "    const galleryDiv = document.getElementById('gallery');\n"
         "    const galleryContainer = document.getElementById('gallery-container');\n"
+        "    const uploadBtn = document.getElementById('upload-btn');\n"
+        "    const uploadTerminalDiv = document.getElementById('upload-terminal');\n"
+        "    const uploadOutputEl = document.getElementById('upload-output');\n"
+        "    const closeUploadBtn = document.getElementById('close-upload-btn');\n"
         "\n"
         "    viewImagesBtn.addEventListener('click', async () => {\n"
         "      const response = await fetch('/results');\n"
@@ -451,6 +466,40 @@ async def index(request: Request) -> HTMLResponse:
         "\n"
         "    closeGalleryBtn.addEventListener('click', () => {\n"
         "      galleryDiv.hidden = true;\n"
+        "    });\n"
+        "\n"
+        "    uploadBtn.addEventListener('click', async () => {\n"
+        "      if (!confirm('Upload curated images to Cloudinary? Only the first 4 images per SKU will be uploaded.')) return;\n"
+        "      \n"
+        "      galleryDiv.hidden = true;\n"
+        "      uploadTerminalDiv.hidden = false;\n"
+        "      uploadOutputEl.textContent = '';\n"
+        "      uploadBtn.disabled = true;\n"
+        "      \n"
+        "      const uploadSource = new EventSource('/upload-to-cloudinary');\n"
+        "      \n"
+        "      uploadSource.addEventListener('log', (e) => {\n"
+        "        uploadOutputEl.textContent += e.data;\n"
+        "        uploadOutputEl.scrollTop = uploadOutputEl.scrollHeight;\n"
+        "      });\n"
+        "      \n"
+        "      uploadSource.addEventListener('done', (e) => {\n"
+        "        uploadBtn.disabled = false;\n"
+        "        uploadSource.close();\n"
+        "        if (e.data === 'success') {\n"
+        "          uploadOutputEl.textContent += '\\n\\n🎉 All done! Images uploaded to Cloudinary.';\n"
+        "        }\n"
+        "      });\n"
+        "      \n"
+        "      uploadSource.onerror = () => {\n"
+        "        uploadBtn.disabled = false;\n"
+        "        uploadSource.close();\n"
+        "        uploadOutputEl.textContent += '\\n\\n❌ Connection error during upload.';\n"
+        "      };\n"
+        "    });\n"
+        "\n"
+        "    closeUploadBtn.addEventListener('click', () => {\n"
+        "      uploadTerminalDiv.hidden = true;\n"
         "    });\n"
         "\n"
         "    function renderGallery() {\n"
@@ -585,19 +634,21 @@ class DeleteImageRequest(BaseModel):
 async def delete_image(request: DeleteImageRequest) -> JSONResponse:
     """Remove a specific image from a SKU's image list in images.json"""
     logger.info("Delete image request: sku=%s url=%s", request.sku, request.image_url)
-    
+
     results_file = FILES_DIR / "images.json"
     if not results_file.exists():
         raise HTTPException(status_code=404, detail="images.json not found")
-    
+
     try:
         data = json.loads(results_file.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to parse images.json: {exc}")
-    
+        raise HTTPException(
+            status_code=500, detail=f"Failed to parse images.json: {exc}"
+        )
+
     if not isinstance(data, list):
         raise HTTPException(status_code=500, detail="images.json is not a list")
-    
+
     found = False
     for entry in data:
         if entry.get("sku") == request.sku:
@@ -606,20 +657,95 @@ async def delete_image(request: DeleteImageRequest) -> JSONResponse:
                 images.remove(request.image_url)
                 entry["images"] = images
                 found = True
-                logger.info("Removed image from SKU %s, %d images remaining", request.sku, len(images))
+                logger.info(
+                    "Removed image from SKU %s, %d images remaining",
+                    request.sku,
+                    len(images),
+                )
                 break
-    
+
     if not found:
         raise HTTPException(status_code=404, detail="SKU or image not found")
-    
+
     # Write back to file
     results_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
-    
+
     # Update runner's cached results
     async with runner._state_lock:
         runner._last_results = data
+
+    return JSONResponse(
+        {
+            "status": "deleted",
+            "sku": request.sku,
+            "remaining": len(
+                [e for e in data if e.get("sku") == request.sku][0].get("images", [])
+            ),
+        }
+    )
+
+
+@app.post("/upload-to-cloudinary")
+async def upload_to_cloudinary() -> StreamingResponse:
+    """Execute upload_catalog.py and stream the output"""
+    logger.info("Starting Cloudinary upload")
     
-    return JSONResponse({"status": "deleted", "sku": request.sku, "remaining": len([e for e in data if e.get("sku") == request.sku][0].get("images", []))})
+    upload_script = PROJECT_ROOT / "upload_catalog.py"
+    images_json = FILES_DIR / "images.json"
+    
+    if not upload_script.exists():
+        raise HTTPException(status_code=404, detail="upload_catalog.py not found")
+    if not images_json.exists():
+        raise HTTPException(status_code=404, detail="images.json not found")
+    
+    from typing import AsyncGenerator
+    
+    async def upload_stream() -> AsyncGenerator[str, None]:
+        try:
+            env = os.environ.copy()
+            env.setdefault("PYTHONIOENCODING", "utf-8")
+            env.setdefault("PYTHONUTF8", "1")
+            
+            process = await asyncio.create_subprocess_exec(
+                sys.executable,
+                str(upload_script),
+                str(images_json),
+                cwd=str(PROJECT_ROOT),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+                env=env,
+            )
+            
+            yield _format_sse("log", "Starting Cloudinary upload...\n")
+            
+            if process.stdout:
+                async for line_bytes in process.stdout:
+                    line = line_bytes.decode("utf-8", errors="replace")
+                    yield _format_sse("log", line)
+            
+            await process.wait()
+            
+            if process.returncode == 0:
+                yield _format_sse("log", "\n✅ Upload complete!\n")
+                yield _format_sse("done", "success")
+            else:
+                yield _format_sse("log", f"\n❌ Upload failed with code {process.returncode}\n")
+                yield _format_sse("done", "error")
+                
+        except Exception as exc:
+            logger.exception("Upload error")
+            yield _format_sse("log", f"Error: {exc}\n")
+            yield _format_sse("done", "error")
+    
+    return StreamingResponse(
+        upload_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.get("/stream")
