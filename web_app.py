@@ -356,7 +356,7 @@ async def index(request: Request) -> HTMLResponse:
         "  </div>\n"
         '  <div class="gallery" id="gallery" hidden>\n'
         "    <h2>Image Gallery</h2>\n"
-        '    <div style="background:#fff3cd; border:1px solid #ffc107; padding:0.75rem; margin-bottom:1rem; border-radius:4px;">\n'
+        '    <div style="background:#fff3cd; border:1px solid #ffc107; padding:0.75rem; margin-bottom:1rem; border-radius:4px; color:#000;">\n'
         "      <strong>⚠️ Reminder:</strong> Only the <strong>first 4 images</strong> for each SKU will be uploaded to Cloudinary.\n"
         "    </div>\n"
         '    <button type="button" id="close-gallery-btn">Close Gallery</button>\n'
@@ -684,7 +684,7 @@ async def delete_image(request: DeleteImageRequest) -> JSONResponse:
     )
 
 
-@app.post("/upload-to-cloudinary")
+@app.get("/upload-to-cloudinary")
 async def upload_to_cloudinary() -> StreamingResponse:
     """Execute upload_catalog.py and stream the output"""
     logger.info("Starting Cloudinary upload")
