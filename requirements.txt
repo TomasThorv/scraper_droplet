@@ -18,3 +18,7 @@ python-dotenv>=1.0.0
 # Additional dependencies for stable operation
 click>=8.0.0
 vine>=5.0.0
+
+# Web interface dependencies
+fastapi>=0.110.0
+uvicorn[standard]>=0.23.0
