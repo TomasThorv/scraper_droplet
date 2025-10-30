@@ -301,7 +301,7 @@ async def index(request: Request) -> HTMLResponse:
         "  <div class=\"status\" id=\"status\">Status: idle</div>\n"
         "  <form id=\"sku-form\">\n"
         "    <label for=\"skus\">Enter SKU codes (one per line or comma separated):</label><br>\n"
-        "    <textarea id=\"skus\" name=\"skus\" placeholder=\"12345\n98765\"></textarea>\n"
+    "    <textarea id=\"skus\" name=\"skus\" placeholder=\"12345&#10;98765\"></textarea>\n"
         "    <div style=\"margin-top:0.5rem;\">\n"
         "      <button type=\"submit\" id=\"run-btn\">Run pipeline</button>\n"
         "      <button type=\"button\" id=\"clear-btn\">Clear log</button>\n"
@@ -390,6 +390,13 @@ async def start_pipeline(request: StartRequest) -> JSONResponse:
     await runner.start(request.skus)
     return JSONResponse({"status": "started"})
 
+# Optional: GET helper to trigger pipeline from the address bar
+@app.get("/start-get")
+async def start_pipeline_get(skus: str = "") -> JSONResponse:
+    logger.info("/start-get invoked with payload length=%s", len(skus))
+    await runner.start(skus)
+    return JSONResponse({"status": "started"})
+
 
 @app.get("/status")
 async def pipeline_status() -> JSONResponse:
@@ -413,7 +420,8 @@ async def stream() -> StreamingResponse:
     queue, history = await runner.register_listener()
     logger.debug("/stream history length %s for listener %s", len(history), id(queue))
 
-    async def event_generator() -> Iterable[str]:
+    from typing import AsyncGenerator
+    async def event_generator() -> AsyncGenerator[str, None]:
         try:
             for event, data in history:
                 logger.debug("Sending historical event=%s data=%r", event, data)
