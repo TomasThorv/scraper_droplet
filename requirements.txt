@@ -22,3 +22,9 @@ vine>=5.0.0
 # Web interface dependencies
 fastapi>=0.110.0
 uvicorn[standard]>=0.23.0
+
+# Cloudinary upload dependencies
+cloudinary>=1.36.0
+requests>=2.31.0
+tqdm>=4.66.0
+
