@@ -40,7 +40,9 @@ class PipelineRunner:
         self._last_error: Optional[str] = None
         self._last_results: Optional[list[dict]] = None
 
-    async def register_listener(self) -> Tuple[asyncio.Queue[Tuple[str, str]], list[Tuple[str, str]]]:
+    async def register_listener(
+        self,
+    ) -> Tuple[asyncio.Queue[Tuple[str, str]], list[Tuple[str, str]]]:
         queue: asyncio.Queue[Tuple[str, str]] = asyncio.Queue()
         logger.debug("Registering new listener %s", id(queue))
         async with self._state_lock:
@@ -58,7 +60,11 @@ class PipelineRunner:
         logger.debug("Unregistering listener %s", id(queue))
         async with self._state_lock:
             self._listeners.discard(queue)
-            logger.debug("Listener %s removed. Remaining listeners: %s", id(queue), len(self._listeners))
+            logger.debug(
+                "Listener %s removed. Remaining listeners: %s",
+                id(queue),
+                len(self._listeners),
+            )
 
     async def _broadcast(self, event: str, data: str) -> None:
         logger.debug("Broadcasting event=%s data=%r", event, data)
@@ -66,7 +72,9 @@ class PipelineRunner:
             self._history.append((event, data))
             listeners = list(self._listeners)
             logger.debug(
-                "History length now %s. Notifying %s listeners.", len(self._history), len(listeners)
+                "History length now %s. Notifying %s listeners.",
+                len(self._history),
+                len(listeners),
             )
         for listener in listeners:
             logger.debug("Queueing event %s for listener %s", event, id(listener))
@@ -83,11 +91,15 @@ class PipelineRunner:
         cleaned_skus = self._normalise_skus(raw_skus)
         logger.debug("Normalised SKUs: %s", cleaned_skus)
         if not cleaned_skus:
-            raise HTTPException(status_code=400, detail="Please provide at least one SKU.")
+            raise HTTPException(
+                status_code=400, detail="Please provide at least one SKU."
+            )
 
         async with self._state_lock:
             if self._task and not self._task.done():
-                raise HTTPException(status_code=409, detail="Pipeline is already running.")
+                raise HTTPException(
+                    status_code=409, detail="Pipeline is already running."
+                )
             self._history.clear()
             self._last_error = None
             self._last_results = None
@@ -98,7 +110,8 @@ class PipelineRunner:
         logger.info("Saved %s SKUs to %s", len(cleaned_skus), SKU_FILE)
 
         await self._broadcast(
-            "log", f"Saved {len(cleaned_skus)} SKU(s) to {SKU_FILE.relative_to(PROJECT_ROOT)}"
+            "log",
+            f"Saved {len(cleaned_skus)} SKU(s) to {SKU_FILE.relative_to(PROJECT_ROOT)}",
         )
 
         if not RUN_ALL_SCRIPT.exists():
@@ -118,7 +131,11 @@ class PipelineRunner:
         env.setdefault("PYTHONUTF8", "1")
 
         await self._broadcast("log", "Starting scraper pipeline...\n")
-        logger.info("Launching %s with env overrides %s", RUN_ALL_SCRIPT, {k: env[k] for k in ['PYTHONIOENCODING', 'PYTHONUTF8']})
+        logger.info(
+            "Launching %s with env overrides %s",
+            RUN_ALL_SCRIPT,
+            {k: env[k] for k in ["PYTHONIOENCODING", "PYTHONUTF8"]},
+        )
 
         try:
             process = await asyncio.create_subprocess_exec(
@@ -154,7 +171,11 @@ class PipelineRunner:
             logger.info("Pipeline process exited with code %s", return_code)
             await self._broadcast(
                 "log",
-                "Pipeline completed successfully." if return_code == 0 else f"Pipeline exited with code {return_code}.",
+                (
+                    "Pipeline completed successfully."
+                    if return_code == 0
+                    else f"Pipeline exited with code {return_code}."
+                ),
             )
 
             if return_code == 0:
@@ -190,7 +211,10 @@ class PipelineRunner:
 
         try:
             data = json.loads(results_file.read_text(encoding="utf-8"))
-            logger.info("Loaded images.json with %s top-level item(s)", len(data) if isinstance(data, list) else 1)
+            logger.info(
+                "Loaded images.json with %s top-level item(s)",
+                len(data) if isinstance(data, list) else 1,
+            )
         except json.JSONDecodeError as exc:
             message = f"Unable to parse images.json: {exc}"
             await self._broadcast("log", message)
@@ -215,7 +239,9 @@ class PipelineRunner:
             await self._broadcast("results", json.dumps(data))
             self._last_results = data
         else:
-            await self._broadcast("log", "images.json does not contain a list of results.")
+            await self._broadcast(
+                "log", "images.json does not contain a list of results."
+            )
             self._last_results = None
             logger.error("images.json payload was not a list: %r", data)
 
@@ -278,12 +304,16 @@ def _format_sse(event: str, data: str) -> str:
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request) -> HTMLResponse:
-    logger.debug("Serving index for %s with query params %s", request.client, request.query_params)
+    logger.debug(
+        "Serving index for %s with query params %s",
+        request.client,
+        request.query_params,
+    )
     html = (
         "<!DOCTYPE html>\n"
-        "<html lang=\"en\">\n"
+        '<html lang="en">\n'
         "<head>\n"
-        "  <meta charset=\"utf-8\">\n"
+        '  <meta charset="utf-8">\n'
         "  <title>Scraper Runner</title>\n"
         "  <style>\n"
         "    body { font-family: monospace; background:#111; color:#e0e0e0; margin:0; padding:1.5rem; }\n"
@@ -298,20 +328,20 @@ async def index(request: Request) -> HTMLResponse:
         "</head>\n"
         "<body>\n"
         "  <h1>Scraper Runner</h1>\n"
-        "  <div class=\"status\" id=\"status\">Status: idle</div>\n"
-        "  <form id=\"sku-form\">\n"
-        "    <label for=\"skus\">Enter SKU codes (one per line or comma separated):</label><br>\n"
-    "    <textarea id=\"skus\" name=\"skus\" placeholder=\"12345&#10;98765\"></textarea>\n"
-        "    <div style=\"margin-top:0.5rem;\">\n"
-        "      <button type=\"submit\" id=\"run-btn\">Run pipeline</button>\n"
-        "      <button type=\"button\" id=\"clear-btn\">Clear log</button>\n"
+        '  <div class="status" id="status">Status: idle</div>\n'
+        '  <form id="sku-form">\n'
+        '    <label for="skus">Enter SKU codes (one per line or comma separated):</label><br>\n'
+        '    <textarea id="skus" name="skus" placeholder="12345&#10;98765"></textarea>\n'
+        '    <div style="margin-top:0.5rem;">\n'
+        '      <button type="submit" id="run-btn">Run pipeline</button>\n'
+        '      <button type="button" id="clear-btn">Clear log</button>\n'
         "    </div>\n"
         "  </form>\n"
         "  <h2>Terminal output</h2>\n"
-        "  <pre id=\"terminal\"></pre>\n"
-        "  <div class=\"results\" id=\"results\" hidden>\n"
+        '  <pre id="terminal"></pre>\n'
+        '  <div class="results" id="results" hidden>\n'
         "    <strong>Results JSON:</strong>\n"
-        "    <pre id=\"results-json\" style=\"background:#000; color:#0ff; margin-top:0.5rem; max-height:15rem; overflow:auto;\"></pre>\n"
+        '    <pre id="results-json" style="background:#000; color:#0ff; margin-top:0.5rem; max-height:15rem; overflow:auto;"></pre>\n'
         "  </div>\n"
         "  <script>\n"
         "    const statusEl = document.getElementById('status');\n"
@@ -390,6 +420,7 @@ async def start_pipeline(request: StartRequest) -> JSONResponse:
     await runner.start(request.skus)
     return JSONResponse({"status": "started"})
 
+
 # Optional: GET helper to trigger pipeline from the address bar
 @app.get("/start-get")
 async def start_pipeline_get(skus: str = "") -> JSONResponse:
@@ -421,6 +452,7 @@ async def stream() -> StreamingResponse:
     logger.debug("/stream history length %s for listener %s", len(history), id(queue))
 
     from typing import AsyncGenerator
+
     async def event_generator() -> AsyncGenerator[str, None]:
         try:
             for event, data in history:
@@ -462,7 +494,12 @@ def main(argv: Optional[List[str]] = None) -> None:
     )
 
     args = parser.parse_args(argv)
-    logger.info("Starting uvicorn with host=%s port=%s reload=%s", args.host, args.port, args.reload)
+    logger.info(
+        "Starting uvicorn with host=%s port=%s reload=%s",
+        args.host,
+        args.port,
+        args.reload,
+    )
 
     uvicorn.run("web_app:app", host=args.host, port=args.port, reload=args.reload)
 
