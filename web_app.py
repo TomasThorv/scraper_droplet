@@ -95,7 +95,7 @@ class PipelineRunner:
                 raise HTTPException(status_code=400, detail="No pipeline is running")
             task = self._task
             process = self._process
-        
+
         if process:
             logger.info("Terminating process with pid %s", process.pid)
             try:
@@ -112,7 +112,7 @@ class PipelineRunner:
             except Exception as exc:
                 logger.exception("Error stopping process")
                 await self._broadcast("log", f"Error stopping process: {exc}")
-        
+
         if task and not task.done():
             logger.info("Cancelling pipeline task")
             task.cancel()
