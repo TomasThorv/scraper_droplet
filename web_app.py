@@ -357,33 +357,3 @@ async def stream() -> StreamingResponse:
 
 
 __all__ = ["app"]
-
-
-def main(argv: Optional[List[str]] = None) -> None:
-    """Run the FastAPI application with configurable host/port."""
-
-    parser = argparse.ArgumentParser(description="Run the scraper web TUI server.")
-    parser.add_argument(
-        "--host",
-        default=os.getenv("SCRAPER_TUI_HOST", "0.0.0.0"),
-        help="Network host to bind to (default: 0.0.0.0 or SCRAPER_TUI_HOST).",
-    )
-    parser.add_argument(
-        "--port",
-        type=int,
-        default=int(os.getenv("SCRAPER_TUI_PORT", "8000")),
-        help="Port to listen on (default: 8000 or SCRAPER_TUI_PORT).",
-    )
-    parser.add_argument(
-        "--reload",
-        action="store_true",
-        help="Enable auto-reload (useful for development only).",
-    )
-
-    args = parser.parse_args(argv)
-
-    uvicorn.run("web_app:app", host=args.host, port=args.port, reload=args.reload)
-
-
-if __name__ == "__main__":  # pragma: no cover - convenience CLI
-    main()
