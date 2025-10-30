@@ -324,6 +324,15 @@ async def index(request: Request) -> HTMLResponse:
         "    pre { background:#000; color:#0f0; padding:1rem; min-height:20rem; overflow:auto; border:1px solid #333; }\n"
         "    .status { margin:0.5rem 0 1rem; }\n"
         "    .results { margin-top:1rem; background:#000; color:#0ff; padding:1rem; border:1px solid #044; }\n"
+        "    .gallery { margin-top:1rem; background:#000; color:#0ff; padding:1rem; border:1px solid #044; }\n"
+        "    .sku-section { margin-bottom:2rem; border:1px solid #044; padding:1rem; }\n"
+        "    .sku-title { color:#0f0; font-size:1.2rem; margin-bottom:0.5rem; }\n"
+        "    .image-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:1rem; }\n"
+        "    .image-card { position:relative; border:1px solid #333; padding:0.5rem; background:#111; }\n"
+        "    .image-card img { width:100%; height:auto; display:block; }\n"
+        "    .delete-btn { position:absolute; top:0.5rem; right:0.5rem; background:#f00; color:#fff; border:none; padding:0.25rem 0.5rem; cursor:pointer; font-weight:bold; }\n"
+        "    .delete-btn:hover { background:#c00; }\n"
+        "    .image-url { font-size:0.7rem; color:#888; word-break:break-all; margin-top:0.25rem; }\n"
         "  </style>\n"
         "</head>\n"
         "<body>\n"
@@ -341,7 +350,13 @@ async def index(request: Request) -> HTMLResponse:
         '  <pre id="terminal"></pre>\n'
         '  <div class="results" id="results" hidden>\n'
         "    <strong>Results JSON:</strong>\n"
+        '    <button type="button" id="view-images-btn" style="margin-left:1rem;">View Images</button>\n'
         '    <pre id="results-json" style="background:#000; color:#0ff; margin-top:0.5rem; max-height:15rem; overflow:auto;"></pre>\n'
+        "  </div>\n"
+        '  <div class="gallery" id="gallery" hidden>\n'
+        "    <h2>Image Gallery</h2>\n"
+        '    <button type="button" id="close-gallery-btn">Close Gallery</button>\n'
+        '    <div id="gallery-container" style="margin-top:1rem;"></div>\n'
         "  </div>\n"
         "  <script>\n"
         "    const statusEl = document.getElementById('status');\n"
@@ -419,6 +434,94 @@ async def index(request: Request) -> HTMLResponse:
         "    source.onerror = () => {\n"
         "      statusEl.textContent = 'Status: connection lost';\n"
         "    };\n"
+        "\n"
+        "    let currentResults = [];\n"
+        "    const viewImagesBtn = document.getElementById('view-images-btn');\n"
+        "    const closeGalleryBtn = document.getElementById('close-gallery-btn');\n"
+        "    const galleryDiv = document.getElementById('gallery');\n"
+        "    const galleryContainer = document.getElementById('gallery-container');\n"
+        "\n"
+        "    viewImagesBtn.addEventListener('click', async () => {\n"
+        "      const response = await fetch('/results');\n"
+        "      const data = await response.json();\n"
+        "      currentResults = data.results || [];\n"
+        "      renderGallery();\n"
+        "      galleryDiv.hidden = false;\n"
+        "    });\n"
+        "\n"
+        "    closeGalleryBtn.addEventListener('click', () => {\n"
+        "      galleryDiv.hidden = true;\n"
+        "    });\n"
+        "\n"
+        "    function renderGallery() {\n"
+        "      galleryContainer.innerHTML = '';\n"
+        "      if (!currentResults.length) {\n"
+        "        galleryContainer.innerHTML = '<p>No results to display</p>';\n"
+        "        return;\n"
+        "      }\n"
+        "      currentResults.forEach(entry => {\n"
+        "        const sku = entry.sku || 'Unknown';\n"
+        "        const images = entry.images || [];\n"
+        "        const section = document.createElement('div');\n"
+        "        section.className = 'sku-section';\n"
+        "        const title = document.createElement('div');\n"
+        "        title.className = 'sku-title';\n"
+        "        title.textContent = `SKU: ${sku} (${images.length} image(s))`;\n"
+        "        section.appendChild(title);\n"
+        "        if (!images.length) {\n"
+        "          const noImg = document.createElement('p');\n"
+        "          noImg.textContent = 'No images';\n"
+        "          section.appendChild(noImg);\n"
+        "        } else {\n"
+        "          const grid = document.createElement('div');\n"
+        "          grid.className = 'image-grid';\n"
+        "          images.forEach(url => {\n"
+        "            const card = document.createElement('div');\n"
+        "            card.className = 'image-card';\n"
+        "            const img = document.createElement('img');\n"
+        "            img.src = url;\n"
+        "            img.alt = sku;\n"
+        "            img.loading = 'lazy';\n"
+        "            const deleteBtn = document.createElement('button');\n"
+        "            deleteBtn.className = 'delete-btn';\n"
+        "            deleteBtn.textContent = 'X';\n"
+        "            deleteBtn.onclick = async () => {\n"
+        "              if (!confirm(`Delete this image from ${sku}?`)) return;\n"
+        "              try {\n"
+        "                const response = await fetch('/delete-image', {\n"
+        "                  method: 'POST',\n"
+        "                  headers: { 'Content-Type': 'application/json' },\n"
+        "                  body: JSON.stringify({ sku, image_url: url })\n"
+        "                });\n"
+        "                if (response.ok) {\n"
+        "                  card.remove();\n"
+        "                  const idx = currentResults.findIndex(e => e.sku === sku);\n"
+        "                  if (idx !== -1) {\n"
+        "                    currentResults[idx].images = currentResults[idx].images.filter(u => u !== url);\n"
+        "                    title.textContent = `SKU: ${sku} (${currentResults[idx].images.length} image(s))`;\n"
+        "                  }\n"
+        "                } else {\n"
+        "                  const payload = await response.json();\n"
+        "                  alert('Delete failed: ' + (payload.detail || 'Unknown error'));\n"
+        "                }\n"
+        "              } catch (err) {\n"
+        "                alert('Network error: ' + err);\n"
+        "              }\n"
+        "            };\n"
+        "            const urlLabel = document.createElement('div');\n"
+        "            urlLabel.className = 'image-url';\n"
+        "            urlLabel.textContent = url.slice(0, 60) + (url.length > 60 ? '...' : '');\n"
+        "            card.appendChild(img);\n"
+        "            card.appendChild(deleteBtn);\n"
+        "            card.appendChild(urlLabel);\n"
+        "            grid.appendChild(card);\n"
+        "          });\n"
+        "          section.appendChild(grid);\n"
+        "        }\n"
+        "        galleryContainer.appendChild(section);\n"
+        "      });\n"
+        "    }\n"
+        "\n"
         "    // Auto-start if ?skus= is present in the URL\n"
         "    console.log('[init] Page loaded, checking for ?skus=');\n"
         "    const params = new URLSearchParams(window.location.search);\n"
@@ -471,6 +574,52 @@ async def pipeline_results() -> JSONResponse:
     results_payload = await runner.get_results()
     logger.debug("/results returning %s", results_payload)
     return JSONResponse({"results": results_payload})
+
+
+class DeleteImageRequest(BaseModel):
+    sku: str
+    image_url: str
+
+
+@app.post("/delete-image")
+async def delete_image(request: DeleteImageRequest) -> JSONResponse:
+    """Remove a specific image from a SKU's image list in images.json"""
+    logger.info("Delete image request: sku=%s url=%s", request.sku, request.image_url)
+    
+    results_file = FILES_DIR / "images.json"
+    if not results_file.exists():
+        raise HTTPException(status_code=404, detail="images.json not found")
+    
+    try:
+        data = json.loads(results_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to parse images.json: {exc}")
+    
+    if not isinstance(data, list):
+        raise HTTPException(status_code=500, detail="images.json is not a list")
+    
+    found = False
+    for entry in data:
+        if entry.get("sku") == request.sku:
+            images = entry.get("images", [])
+            if request.image_url in images:
+                images.remove(request.image_url)
+                entry["images"] = images
+                found = True
+                logger.info("Removed image from SKU %s, %d images remaining", request.sku, len(images))
+                break
+    
+    if not found:
+        raise HTTPException(status_code=404, detail="SKU or image not found")
+    
+    # Write back to file
+    results_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    
+    # Update runner's cached results
+    async with runner._state_lock:
+        runner._last_results = data
+    
+    return JSONResponse({"status": "deleted", "sku": request.sku, "remaining": len([e for e in data if e.get("sku") == request.sku][0].get("images", []))})
 
 
 @app.get("/stream")
