@@ -409,15 +409,35 @@ async def index(request: Request) -> HTMLResponse:
               min-height: 100vh;
             }
 
-            /* Full-width interactive header background */
+            /* Full-screen interactive background (behind the UI) */
             .large-header {
-              position: relative;
+              position: fixed;
+              top: 0;
+              left: 0;
               width: 100%;
-              background: #333;
+              height: 100vh;
+              background: var(--bg);
               overflow: hidden;
               background-size: cover;
               background-position: center center;
-              z-index: 1;
+              z-index: 0; /* put behind the app content */
+              pointer-events: none; /* let clicks pass through */
+            }
+
+            /* Canvas should fill the large-header */
+            #demo-canvas {
+              position: absolute;
+              top: 0;
+              left: 0;
+              width: 100%;
+              height: 100%;
+              display: block;
+            }
+
+            /* Ensure main content sits above the animated background */
+            .app-container {
+              position: relative;
+              z-index: 2;
             }
 
             /* Decorative thin highlight lines used in header/footer */
@@ -821,9 +841,9 @@ async def index(request: Request) -> HTMLResponse:
         </head>
         <body class="military-grid">
           <div class="glow-line"></div>
-          <div id="large-header" class="large-header" style="height: 340px;">
-            <canvas id="demo-canvas" width="1366" height="340"></canvas>
-            <h1 class="main-title">Connect <span class="thin">Three</span></h1>
+          <div id="large-header" class="large-header">
+            <canvas id="demo-canvas"></canvas>
+            <h1 class="main-title" aria-hidden="true" style="position: absolute; left:50%; transform: translateX(-50%); top:18px; color: rgba(230,238,248,0.06); pointer-events: none;">Connect <span class="thin">Three</span></h1>
           </div>
           <main class="app-container">
             <header class="page-header">
