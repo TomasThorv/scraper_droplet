@@ -10,7 +10,9 @@ import sys
 from pathlib import Path
 from typing import Iterable, List, Optional, Tuple
 
-from fastapi import FastAPI, HTTPException
+import logging
+
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 import uvicorn
@@ -40,29 +42,46 @@ class PipelineRunner:
 
     async def register_listener(self) -> Tuple[asyncio.Queue[Tuple[str, str]], list[Tuple[str, str]]]:
         queue: asyncio.Queue[Tuple[str, str]] = asyncio.Queue()
+        logger.debug("Registering new listener %s", id(queue))
         async with self._state_lock:
             history_copy = list(self._history)
             self._listeners.add(queue)
+            logger.debug(
+                "Listener %s registered. Current listeners: %s. History length: %s",
+                id(queue),
+                len(self._listeners),
+                len(self._history),
+            )
         return queue, history_copy
 
     async def unregister_listener(self, queue: asyncio.Queue[Tuple[str, str]]) -> None:
+        logger.debug("Unregistering listener %s", id(queue))
         async with self._state_lock:
             self._listeners.discard(queue)
+            logger.debug("Listener %s removed. Remaining listeners: %s", id(queue), len(self._listeners))
 
     async def _broadcast(self, event: str, data: str) -> None:
+        logger.debug("Broadcasting event=%s data=%r", event, data)
         async with self._state_lock:
             self._history.append((event, data))
             listeners = list(self._listeners)
+            logger.debug(
+                "History length now %s. Notifying %s listeners.", len(self._history), len(listeners)
+            )
         for listener in listeners:
+            logger.debug("Queueing event %s for listener %s", event, id(listener))
             listener.put_nowait((event, data))
 
     async def _set_status(self, status: str) -> None:
+        logger.debug("Setting status to %s", status)
         async with self._state_lock:
             self._status = status
         await self._broadcast("status", status)
 
     async def start(self, raw_skus: str) -> None:
+        logger.debug("Start requested with raw_skus=%r", raw_skus)
         cleaned_skus = self._normalise_skus(raw_skus)
+        logger.debug("Normalised SKUs: %s", cleaned_skus)
         if not cleaned_skus:
             raise HTTPException(status_code=400, detail="Please provide at least one SKU.")
 
@@ -72,9 +91,11 @@ class PipelineRunner:
             self._history.clear()
             self._last_error = None
             self._last_results = None
+            logger.debug("Reset state for new pipeline run")
 
         FILES_DIR.mkdir(parents=True, exist_ok=True)
         SKU_FILE.write_text("\n".join(cleaned_skus) + "\n", encoding="utf-8")
+        logger.info("Saved %s SKUs to %s", len(cleaned_skus), SKU_FILE)
 
         await self._broadcast(
             "log", f"Saved {len(cleaned_skus)} SKU(s) to {SKU_FILE.relative_to(PROJECT_ROOT)}"
@@ -84,9 +105,11 @@ class PipelineRunner:
             error = f"run_all.py not found at {RUN_ALL_SCRIPT}"
             await self._broadcast("log", error)
             self._last_error = error
+            logger.error(error)
             raise HTTPException(status_code=500, detail=error)
 
         await self._set_status("running")
+        logger.info("Scheduling pipeline task")
         self._task = asyncio.create_task(self._run_pipeline())
 
     async def _run_pipeline(self) -> None:
@@ -95,6 +118,7 @@ class PipelineRunner:
         env.setdefault("PYTHONUTF8", "1")
 
         await self._broadcast("log", "Starting scraper pipeline...\n")
+        logger.info("Launching %s with env overrides %s", RUN_ALL_SCRIPT, {k: env[k] for k in ['PYTHONIOENCODING', 'PYTHONUTF8']})
 
         try:
             process = await asyncio.create_subprocess_exec(
@@ -105,10 +129,12 @@ class PipelineRunner:
                 stderr=asyncio.subprocess.STDOUT,
                 env=env,
             )
+            logger.debug("Subprocess started with pid %s", process.pid)
         except Exception as exc:  # pragma: no cover - defensive logging
             message = f"Failed to launch pipeline: {exc}"
             await self._broadcast("log", message)
             self._last_error = message
+            logger.exception("Failed to launch pipeline")
             await self._set_status("idle")
             return
 
@@ -118,47 +144,59 @@ class PipelineRunner:
             while True:
                 line = await process.stdout.readline()
                 if not line:
+                    logger.debug("No more output from pipeline process")
                     break
                 text = line.decode("utf-8", errors="replace").rstrip("\n")
+                logger.debug("Pipeline output: %s", text)
                 await self._broadcast("log", text)
 
             return_code = await process.wait()
+            logger.info("Pipeline process exited with code %s", return_code)
             await self._broadcast(
                 "log",
                 "Pipeline completed successfully." if return_code == 0 else f"Pipeline exited with code {return_code}.",
             )
 
             if return_code == 0:
+                logger.debug("Attempting to load results")
                 await self._load_results()
             else:
                 self._last_error = f"Pipeline failed with exit code {return_code}."
+                logger.warning(self._last_error)
         except asyncio.CancelledError:  # pragma: no cover - cancellation path
             await self._broadcast("log", "Pipeline execution cancelled.")
             self._last_error = "Pipeline was cancelled."
+            logger.warning("Pipeline task cancelled")
             raise
         except Exception as exc:  # pragma: no cover - defensive logging
             message = f"Unexpected error: {exc}"
             await self._broadcast("log", message)
             self._last_error = message
+            logger.exception("Unexpected error while running pipeline")
         finally:
             await self._set_status("idle")
             async with self._state_lock:
                 self._task = None
+            logger.debug("Pipeline task cleaned up")
 
     async def _load_results(self) -> None:
         results_file = FILES_DIR / "images.json"
+        logger.debug("Looking for results file at %s", results_file)
         if not results_file.exists():
             await self._broadcast("log", "No images.json file produced.")
             self._last_results = None
+            logger.warning("images.json file not found")
             return
 
         try:
             data = json.loads(results_file.read_text(encoding="utf-8"))
+            logger.info("Loaded images.json with %s top-level item(s)", len(data) if isinstance(data, list) else 1)
         except json.JSONDecodeError as exc:
             message = f"Unable to parse images.json: {exc}"
             await self._broadcast("log", message)
             self._last_error = message
             self._last_results = None
+            logger.exception("Failed to parse images.json")
             return
 
         if isinstance(data, list):
@@ -166,6 +204,7 @@ class PipelineRunner:
                 f"{entry.get('sku', '<unknown>')}: {len(entry.get('images', []))} image(s)"
                 for entry in data
             ]
+            logger.debug("Results summary prepared with %s line(s)", len(summary_lines))
             await self._broadcast("log", "--- Results summary ---")
             for line in summary_lines[:20]:
                 await self._broadcast("log", line)
@@ -178,19 +217,31 @@ class PipelineRunner:
         else:
             await self._broadcast("log", "images.json does not contain a list of results.")
             self._last_results = None
+            logger.error("images.json payload was not a list: %r", data)
 
     @staticmethod
     def _normalise_skus(raw_skus: str) -> List[str]:
         candidates = [item.strip() for item in raw_skus.replace(",", "\n").splitlines()]
-        return [item for item in candidates if item]
+        filtered = [item for item in candidates if item]
+        logger.debug("Normalised SKUs from %r to %r", raw_skus, filtered)
+        return filtered
 
     async def get_status(self) -> dict:
+        logger.debug("Status requested")
         async with self._state_lock:
             running = self._task is not None and not self._task.done()
             status = self._status
             error = self._last_error
             results_ready = self._last_results is not None
             results_count = len(self._last_results or [])
+            logger.debug(
+                "Status snapshot: running=%s status=%s error=%r results_ready=%s results_count=%s",
+                running,
+                status,
+                error,
+                results_ready,
+                results_count,
+            )
         return {
             "running": running,
             "status": status,
@@ -200,8 +251,17 @@ class PipelineRunner:
         }
 
     async def get_results(self) -> list[dict]:
+        logger.debug("Results requested")
         async with self._state_lock:
             return list(self._last_results or [])
+
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="[%(asctime)s] %(levelname)s %(name)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger("web_app")
 
 
 runner = PipelineRunner()
@@ -217,7 +277,8 @@ def _format_sse(event: str, data: str) -> str:
 
 
 @app.get("/", response_class=HTMLResponse)
-async def index() -> HTMLResponse:
+async def index(request: Request) -> HTMLResponse:
+    logger.debug("Serving index for %s with query params %s", request.client, request.query_params)
     html = (
         "<!DOCTYPE html>\n"
         "<html lang=\"en\">\n"
@@ -325,35 +386,78 @@ async def index() -> HTMLResponse:
 
 @app.post("/start")
 async def start_pipeline(request: StartRequest) -> JSONResponse:
+    logger.info("/start invoked with payload length=%s", len(request.skus))
     await runner.start(request.skus)
     return JSONResponse({"status": "started"})
 
 
 @app.get("/status")
 async def pipeline_status() -> JSONResponse:
-    return JSONResponse(await runner.get_status())
+    logger.debug("/status endpoint called")
+    status_payload = await runner.get_status()
+    logger.debug("/status returning %s", status_payload)
+    return JSONResponse(status_payload)
 
 
 @app.get("/results")
 async def pipeline_results() -> JSONResponse:
-    return JSONResponse({"results": await runner.get_results()})
+    logger.debug("/results endpoint called")
+    results_payload = await runner.get_results()
+    logger.debug("/results returning %s", results_payload)
+    return JSONResponse({"results": results_payload})
 
 
 @app.get("/stream")
 async def stream() -> StreamingResponse:
+    logger.debug("/stream connection opened")
     queue, history = await runner.register_listener()
+    logger.debug("/stream history length %s for listener %s", len(history), id(queue))
 
     async def event_generator() -> Iterable[str]:
         try:
             for event, data in history:
+                logger.debug("Sending historical event=%s data=%r", event, data)
                 yield _format_sse(event, data)
             while True:
                 event, data = await queue.get()
+                logger.debug("Sending live event=%s data=%r", event, data)
                 yield _format_sse(event, data)
         finally:
+            logger.debug("/stream connection closing for listener %s", id(queue))
             await runner.unregister_listener(queue)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 __all__ = ["app"]
+
+
+def main(argv: Optional[List[str]] = None) -> None:
+    """Run the FastAPI application with configurable host/port."""
+
+    parser = argparse.ArgumentParser(description="Run the scraper web TUI server.")
+    parser.add_argument(
+        "--host",
+        default=os.getenv("SCRAPER_TUI_HOST", "0.0.0.0"),
+        help="Network host to bind to (default: 0.0.0.0 or SCRAPER_TUI_HOST).",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=int(os.getenv("SCRAPER_TUI_PORT", "8000")),
+        help="Port to listen on (default: 8000 or SCRAPER_TUI_PORT).",
+    )
+    parser.add_argument(
+        "--reload",
+        action="store_true",
+        help="Enable auto-reload (useful for development only).",
+    )
+
+    args = parser.parse_args(argv)
+    logger.info("Starting uvicorn with host=%s port=%s reload=%s", args.host, args.port, args.reload)
+
+    uvicorn.run("web_app:app", host=args.host, port=args.port, reload=args.reload)
+
+
+if __name__ == "__main__":  # pragma: no cover - convenience CLI
+    main()
