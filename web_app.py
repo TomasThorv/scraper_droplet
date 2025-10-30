@@ -36,6 +36,7 @@ class PipelineRunner:
         self._listeners: set[asyncio.Queue[Tuple[str, str]]] = set()
         self._history: list[Tuple[str, str]] = []
         self._task: Optional[asyncio.Task[None]] = None
+        self._process: Optional[asyncio.subprocess.Process] = None
         self._status: str = "idle"
         self._last_error: Optional[str] = None
         self._last_results: Optional[list[dict]] = None
@@ -85,6 +86,40 @@ class PipelineRunner:
         async with self._state_lock:
             self._status = status
         await self._broadcast("status", status)
+
+    async def stop(self) -> None:
+        """Stop the currently running pipeline"""
+        logger.info("Stop requested")
+        async with self._state_lock:
+            if not self._task or self._task.done():
+                raise HTTPException(status_code=400, detail="No pipeline is running")
+            task = self._task
+            process = self._process
+        
+        if process:
+            logger.info("Terminating process with pid %s", process.pid)
+            try:
+                process.terminate()
+                await self._broadcast("log", "⚠️ Pipeline termination requested...")
+                try:
+                    await asyncio.wait_for(process.wait(), timeout=5.0)
+                    logger.info("Process terminated gracefully")
+                except asyncio.TimeoutError:
+                    logger.warning("Process did not terminate, killing it")
+                    process.kill()
+                    await process.wait()
+                    await self._broadcast("log", "❌ Pipeline forcefully killed")
+            except Exception as exc:
+                logger.exception("Error stopping process")
+                await self._broadcast("log", f"Error stopping process: {exc}")
+        
+        if task and not task.done():
+            logger.info("Cancelling pipeline task")
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                logger.info("Pipeline task cancelled successfully")
 
     async def start(self, raw_skus: str) -> None:
         logger.debug("Start requested with raw_skus=%r", raw_skus)
@@ -146,6 +181,8 @@ class PipelineRunner:
                 stderr=asyncio.subprocess.STDOUT,
                 env=env,
             )
+            async with self._state_lock:
+                self._process = process
             logger.debug("Subprocess started with pid %s", process.pid)
         except Exception as exc:  # pragma: no cover - defensive logging
             message = f"Failed to launch pipeline: {exc}"
@@ -198,6 +235,7 @@ class PipelineRunner:
             await self._set_status("idle")
             async with self._state_lock:
                 self._task = None
+                self._process = None
             logger.debug("Pipeline task cleaned up")
 
     async def _load_results(self) -> None:
@@ -344,6 +382,7 @@ async def index(request: Request) -> HTMLResponse:
         '    <textarea id="skus" name="skus" placeholder="12345&#10;98765"></textarea>\n'
         '    <div style="margin-top:0.5rem;">\n'
         '      <button type="submit" id="run-btn">Run pipeline</button>\n'
+        '      <button type="button" id="stop-btn" style="background:#dc3545; color:white;" disabled>Stop Pipeline</button>\n'
         '      <button type="button" id="clear-btn">Clear log</button>\n'
         "    </div>\n"
         "  </form>\n"
@@ -372,6 +411,7 @@ async def index(request: Request) -> HTMLResponse:
         "    const statusEl = document.getElementById('status');\n"
         "    const terminalEl = document.getElementById('terminal');\n"
         "    const runBtn = document.getElementById('run-btn');\n"
+        "    const stopBtn = document.getElementById('stop-btn');\n"
         "    const clearBtn = document.getElementById('clear-btn');\n"
         "    const formEl = document.getElementById('sku-form');\n"
         "    const resultsBox = document.getElementById('results');\n"
@@ -385,11 +425,29 @@ async def index(request: Request) -> HTMLResponse:
         "      const data = await response.json();\n"
         "      statusEl.textContent = 'Status: ' + data.status + (data.last_error ? ' — ' + data.last_error : '');\n"
         "      runBtn.disabled = data.running;\n"
+        "      stopBtn.disabled = !data.running;\n"
         "      if (!data.running && !data.results_ready) {\n"
         "        resultsBox.hidden = true;\n"
         "        resultsJsonEl.textContent = '';\n"
         "      }\n"
         "    }\n"
+        "\n"
+        "    stopBtn.addEventListener('click', async () => {\n"
+        "      if (!confirm('Stop the running pipeline?')) return;\n"
+        "      try {\n"
+        "        const response = await fetch('/stop', { method: 'POST' });\n"
+        "        if (response.ok) {\n"
+        "          appendLine(terminalEl, '\\n--- Pipeline stopped by user ---');\n"
+        "        } else {\n"
+        "          const payload = await response.json().catch(() => ({}));\n"
+        "          alert(payload.detail || 'Failed to stop pipeline');\n"
+        "        }\n"
+        "      } catch (err) {\n"
+        "        alert('Error stopping pipeline: ' + err);\n"
+        "      }\n"
+        "      await refreshStatus();\n"
+        "    });\n"
+        "\n"
         "\n"
         "    async function startPipelineWithSkus(skus) {\n"
         "      console.log('[startPipelineWithSkus] called with skus:', skus);\n"
@@ -598,6 +656,13 @@ async def start_pipeline(request: StartRequest) -> JSONResponse:
     logger.info("/start invoked with payload length=%s", len(request.skus))
     await runner.start(request.skus)
     return JSONResponse({"status": "started"})
+
+
+@app.post("/stop")
+async def stop_pipeline() -> JSONResponse:
+    logger.info("/stop invoked")
+    await runner.stop()
+    return JSONResponse({"status": "stopped"})
 
 
 # Optional: GET helper to trigger pipeline from the address bar
