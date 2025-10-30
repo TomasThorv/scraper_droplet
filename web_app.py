@@ -334,7 +334,6 @@ async def index(request: Request) -> HTMLResponse:
         "    .delete-btn:hover { background:#c00; }\n"
         "    .image-url { font-size:0.7rem; color:#888; word-break:break-all; margin-top:0.25rem; }\n"
         "    .upload-terminal { margin-top:1rem; background:#000; color:#0f0; padding:1rem; border:1px solid #0a0; }\n"
-
         "  </style>\n"
         "</head>\n"
         "<body>\n"
@@ -358,7 +357,7 @@ async def index(request: Request) -> HTMLResponse:
         '  <div class="gallery" id="gallery" hidden>\n'
         "    <h2>Image Gallery</h2>\n"
         '    <div style="background:#fff3cd; border:1px solid #ffc107; padding:0.75rem; margin-bottom:1rem; border-radius:4px;">\n'
-        '      <strong>⚠️ Reminder:</strong> Only the <strong>first 4 images</strong> for each SKU will be uploaded to Cloudinary.\n'
+        "      <strong>⚠️ Reminder:</strong> Only the <strong>first 4 images</strong> for each SKU will be uploaded to Cloudinary.\n"
         "    </div>\n"
         '    <button type="button" id="close-gallery-btn">Close Gallery</button>\n'
         '    <button type="button" id="upload-btn" style="margin-left:1rem; background:#28a745; color:white;">Done & Upload to Cloudinary</button>\n'
@@ -689,23 +688,23 @@ async def delete_image(request: DeleteImageRequest) -> JSONResponse:
 async def upload_to_cloudinary() -> StreamingResponse:
     """Execute upload_catalog.py and stream the output"""
     logger.info("Starting Cloudinary upload")
-    
+
     upload_script = PROJECT_ROOT / "upload_catalog.py"
     images_json = FILES_DIR / "images.json"
-    
+
     if not upload_script.exists():
         raise HTTPException(status_code=404, detail="upload_catalog.py not found")
     if not images_json.exists():
         raise HTTPException(status_code=404, detail="images.json not found")
-    
+
     from typing import AsyncGenerator
-    
+
     async def upload_stream() -> AsyncGenerator[str, None]:
         try:
             env = os.environ.copy()
             env.setdefault("PYTHONIOENCODING", "utf-8")
             env.setdefault("PYTHONUTF8", "1")
-            
+
             process = await asyncio.create_subprocess_exec(
                 sys.executable,
                 str(upload_script),
@@ -715,28 +714,30 @@ async def upload_to_cloudinary() -> StreamingResponse:
                 stderr=asyncio.subprocess.STDOUT,
                 env=env,
             )
-            
+
             yield _format_sse("log", "Starting Cloudinary upload...\n")
-            
+
             if process.stdout:
                 async for line_bytes in process.stdout:
                     line = line_bytes.decode("utf-8", errors="replace")
                     yield _format_sse("log", line)
-            
+
             await process.wait()
-            
+
             if process.returncode == 0:
                 yield _format_sse("log", "\n✅ Upload complete!\n")
                 yield _format_sse("done", "success")
             else:
-                yield _format_sse("log", f"\n❌ Upload failed with code {process.returncode}\n")
+                yield _format_sse(
+                    "log", f"\n❌ Upload failed with code {process.returncode}\n"
+                )
                 yield _format_sse("done", "error")
-                
+
         except Exception as exc:
             logger.exception("Upload error")
             yield _format_sse("log", f"Error: {exc}\n")
             yield _format_sse("done", "error")
-    
+
     return StreamingResponse(
         upload_stream(),
         media_type="text/event-stream",
