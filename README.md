@@ -15,9 +15,8 @@ scraper_droplet/
 
 ## Running scraper
 
-1. ssh -i C:\Users\Tommi\.ssh\id_digitalocean root@206.189.22.92
-spyrja Whey God fyrir pass
-
+1. create pub key og ssh inna droplet ip
+   ssh -i C:\Users\.ssh\pub_key root@206.189.22.92
 
 2. Install the dependencies:
    ```bash
@@ -31,7 +30,6 @@ source /root/scraper/scraper/venv/bin/activate
 sudo systemctl restart scraper-web
 sudo systemctl status scraper-web --no-pager
 sudo journalctl -u scraper-web -f
-
 
 Annars voða einfalt, nano eða vim f edits og tengt við tha repo svo öll git commands virka :)
 
