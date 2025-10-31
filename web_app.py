@@ -450,10 +450,16 @@ async def index(request: Request) -> HTMLResponse:
             /* --- Typography helpers (project-specific) --- */
             .wayne-title {
               font-family: var(--ui-sans);
-              font-weight: 700;
+              font-weight: 800;
               letter-spacing: 0.01em;
-              color: var(--text);
               margin: 0;
+              font-size: 28px;
+              /* gradient text */
+              background: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 100%);
+              -webkit-background-clip: text;
+              background-clip: text;
+              color: transparent;
+              text-transform: none;
             }
 
             .wayne-subtitle {
@@ -671,6 +677,16 @@ async def index(request: Request) -> HTMLResponse:
               letter-spacing: 0.02em;
             }
 
+            /* Make specific section titles use the small grey uppercase style */
+            .section-title.mini-uppercase {
+              font-size: 11px !important;
+              letter-spacing: .14em !important;
+              text-transform: uppercase !important;
+              color: var(--muted) !important;
+              font-weight: 600 !important;
+              margin: 0 0 8px !important;
+            }
+
             .section-header {
               display: flex;
               justify-content: space-between;
@@ -848,8 +864,7 @@ async def index(request: Request) -> HTMLResponse:
           <main class="app-container">
             <header class="page-header">
               <div>
-                <h1 class="wayne-title">Scraper Runner</h1>
-                <p class="wayne-subtitle">Control the scraping pipeline and review results.</p>
+                <h1 class="wayne-title"><span class="cool-title">SCRAPER OF WWW</span></h1>
               </div>
               <div class="status-chip" id="status">Status: idle</div>
             </header>
@@ -865,7 +880,7 @@ async def index(request: Request) -> HTMLResponse:
               </form>
             </section>
             <section class="panel">
-              <h2 class="section-title">Terminal output</h2>
+              <h2 class="section-title mini-uppercase">Terminal output</h2>
               <pre id="terminal" class="log-terminal"></pre>
             </section>
             <section class="command-interface results-panel" id="results" hidden>
@@ -890,7 +905,7 @@ async def index(request: Request) -> HTMLResponse:
             </section>
             <section class="command-interface upload-terminal" id="upload-terminal" hidden>
               <div class="section-header">
-                <h2 class="section-title">Upload Progress</h2>
+                <h2 class="section-title mini-uppercase">Upload Progress</h2>
                 <button type="button" id="close-upload-btn" class="wayne-button-ghost">Close</button>
               </div>
               <pre id="upload-output" class="results-pre"></pre>
